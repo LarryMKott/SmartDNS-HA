@@ -35,6 +35,20 @@ DNSHA 是一款**纯Shell实现**的DNS主备容灾一键部署系统，基于 S
 ```bash
 # 直接使用curl安装（支持自动检测当地运营商DNS）
 curl -fsSL https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash
+
+# 设置固定IPv4地址
+curl -fsSL https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- \
+  --ipv4 192.168.1.100/24 --gateway 192.168.1.1
+
+# 设置IPv4+IPv6地址
+curl -fsSL https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- \
+  --ipv4 192.168.1.100/24 --gateway 192.168.1.1 \
+  --ipv6 2001:db8::1/64 --ipv6-gateway 2001:db8::fffe
+
+# 指定网卡并设置IP
+curl -fsSL https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- \
+  --interface eth1 \
+  --ipv4 192.168.1.100/24 --gateway 192.168.1.1
 ```
 
 ### 2. 手动下载脚本包
