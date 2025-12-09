@@ -401,12 +401,23 @@ install_dnsha() {
     if [[ -d /opt/dnsha ]]; then
         rm -rf /opt/dnsha
     fi
-    git clone https://github.com/LarryMKott/SmartDNS-HA.git /opt/dnsha >/dev/null 2>&1 || {
+    
+    # 国内加速克隆
+    local repo_url="https://github.com/LarryMKott/SmartDNS-HA.git"
+    local zip_url="https://github.com/LarryMKott/SmartDNS-HA/archive/refs/heads/master.zip"
+    
+    if [[ "$USE_CN_MIRROR" == "true" ]]; then
+        repo_url="https://gitee.com/mirrors/SmartDNS-HA.git"
+        zip_url="https://ghproxy.com/$zip_url"
+        echo_info "使用国内镜像：$repo_url"
+    fi
+    
+    git clone "$repo_url" /opt/dnsha >/dev/null 2>&1 || {
         # 备用下载方式
         echo_info "使用备用方式下载..."
         mkdir -p /opt/dnsha
         cd /opt/dnsha || echo_error "进入目录失败"
-        wget -qO- https://github.com/LarryMKott/SmartDNS-HA/archive/refs/heads/master.zip | unzip -q - && mv SmartDNS-HA-master/* . && rm -rf SmartDNS-HA-master
+        wget -qO- "$zip_url" | unzip -q - && mv SmartDNS-HA-master/* . && rm -rf SmartDNS-HA-master
     }
     
     # 赋予执行权限
@@ -752,6 +763,11 @@ main() {
     
     # 检测系统
     detect_system
+    
+    # 配置国内加速（如果启用）
+    if [[ "$USE_CN_MIRROR" == "true" ]]; then
+        setup_cn_mirror
+    fi
     
     # 检测网卡
     detect_interface
