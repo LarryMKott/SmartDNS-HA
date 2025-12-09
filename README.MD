@@ -32,6 +32,23 @@ DNSHA 是一款**纯Shell实现**的DNS主备容灾一键部署系统，基于 S
 
 ## 🚀 快速开始
 ### 1. 一键安装（推荐）
+
+#### 国内用户（推荐使用国内加速）
+```bash
+# 国内加速安装（使用ghproxy.com加速GitHub访问）
+curl -fsSL https://ghproxy.com/https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- --cn
+
+# 国内加速+固定IPv4配置
+curl -fsSL https://ghproxy.com/https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- --cn \
+  --ipv4 192.168.1.100/24 --gateway 192.168.1.1
+
+# 国内加速+IPv4+IPv6配置
+curl -fsSL https://ghproxy.com/https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- --cn \
+  --ipv4 192.168.1.100/24 --gateway 192.168.1.1 \
+  --ipv6 2001:db8::1/64 --ipv6-gateway 2001:db8::fffe
+```
+
+#### 国际用户
 ```bash
 # 直接使用curl安装（支持自动检测当地运营商DNS）
 curl -fsSL https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash
