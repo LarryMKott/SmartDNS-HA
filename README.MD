@@ -31,19 +31,19 @@ DNSHA 是一款**纯Shell实现**的DNS主备容灾一键部署系统，基于 S
 - 主备节点支持SSH登录（优先免密，也可使用密码）。
 
 ## 🚀 快速开始
-### 1. 下载脚本包
+### 1. 一键安装（推荐）
+```bash
+# 直接使用curl安装（支持自动检测当地运营商DNS）
+curl -fsSL https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash
+```
+
+### 2. 手动下载脚本包
 ```bash
 # 创建脚本目录并进入
 mkdir -p /opt/dnsha && cd /opt/dnsha
 
-# 下载所有核心脚本（建议托管到私有Git仓库，示例为本地创建）
-wget -O deploy_dns.sh https://your-repo/dnsha/deploy_dns.sh
-wget -O install_dns.sh https://your-repo/dnsha/install_dns.sh
-wget -O keepalived_config.sh https://your-repo/dnsha/keepalived_config.sh
-wget -O sync_config.sh https://your-repo/dnsha/sync_config.sh
-wget -O health_check.sh https://your-repo/dnsha/health_check.sh
-wget -O verify_deploy.sh https://your-repo/dnsha/verify_deploy.sh
-wget -O repair_dns.sh https://your-repo/dnsha/repair_dns.sh
+# 下载所有核心脚本
+git clone https://github.com/LarryMKott/SmartDNS-HA.git .
 
 # 赋予执行权限
 chmod +x *.sh
