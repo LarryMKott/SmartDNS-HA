@@ -147,7 +147,7 @@ validate_params() {
     FAILOVER_MODE=${FAILOVER_MODE:-$DEFAULT_FAILOVER_MODE}
     
     # 验证容灾模式
-    if [[ ! " $FAILOVER_MODE " =~ " (vrrp|haproxy|consul) " ]]; then
+    if [[ ! "$FAILOVER_MODE" =~ ^(vrrp|haproxy|consul)$ ]]; then
         echo_error "容灾模式必须是 vrrp、haproxy 或 consul"
     fi
     
