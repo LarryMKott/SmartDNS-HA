@@ -361,6 +361,235 @@ install_dnsha() {
     echo_success "DNSHA安装完成，安装目录：/opt/dnsha"
 }
 
+# 交互式设置IP
+interactive_ip_setup() {
+    echo_info "进入交互式IP配置模式..."
+    
+    # 询问是否设置固定IP
+    read -p "是否设置固定IP？(y/n) [n]: " set_fixed_ip
+    set_fixed_ip=${set_fixed_ip:-n}
+    
+    if [[ "$set_fixed_ip" == "y" || "$set_fixed_ip" == "Y" ]]; then
+        # 询问IPv4设置
+        read -p "是否设置固定IPv4？(y/n) [y]: " set_ipv4_flag
+        set_ipv4_flag=${set_ipv4_flag:-y}
+        
+        if [[ "$set_ipv4_flag" == "y" || "$set_ipv4_flag" == "Y" ]]; then
+            # 获取当前IPv4信息
+            local current_ipv4=$(ip -o -4 addr show "$NET_INTERFACE" | awk '{print $4}' | head -1)
+            local current_gateway=$(ip route show default | grep "$NET_INTERFACE" | awk '{print $3}' | head -1)
+            
+            read -p "请输入IPv4地址（CIDR格式，如：192.168.1.100/24）[$current_ipv4]: " IPV4_ADDR
+            IPV4_ADDR=${IPV4_ADDR:-$current_ipv4}
+            
+            read -p "请输入IPv4网关 [$current_gateway]: " IPV4_GATEWAY
+            IPV4_GATEWAY=${IPV4_GATEWAY:-$current_gateway}
+        fi
+        
+        # 询问IPv6设置
+        read -p "是否设置固定IPv6？(y/n) [y]: " set_ipv6_flag
+        set_ipv6_flag=${set_ipv6_flag:-y}
+        
+        if [[ "$set_ipv6_flag" == "y" || "$set_ipv6_flag" == "Y" ]]; then
+            # 获取当前IPv6信息
+            local current_ipv6=$(ip -o -6 addr show "$NET_INTERFACE" | grep -v 'fe80::' | awk '{print $4}' | head -1)
+            
+            read -p "请输入IPv6地址（CIDR格式，如：2001:db8::1/64）[$current_ipv6]: " IPV6_ADDR
+            IPV6_ADDR=${IPV6_ADDR:-$current_ipv6}
+            
+            # IPv6网关通常是网络前缀+1或fffe
+            local ipv6_prefix=$(echo "$IPV6_ADDR" | cut -d ':' -f 1-5)
+            local default_ipv6_gateway="${ipv6_prefix}::fffe"
+            read -p "请输入IPv6网关 [$default_ipv6_gateway]: " IPV6_GATEWAY
+            IPV6_GATEWAY=${IPV6_GATEWAY:-$default_ipv6_gateway}
+            
+            # 询问IPv6 DDNS绑定
+            read -p "是否为IPv6绑定DDNS域名？(y/n) [n]: " set_ddns_flag
+            set_ddns_flag=${set_ddns_flag:-n}
+            
+            if [[ "$set_ddns_flag" == "y" || "$set_ddns_flag" == "Y" ]]; then
+                setup_ipv6_ddns
+            fi
+        fi
+    fi
+}
+
+# 设置IPv6 DDNS
+auth_cloudflare_ddns() {
+    local api_token=$1
+    local zone_id=$2
+    local record_name=$3
+    local ipv6=$4
+    
+    echo_info "使用Cloudflare DDNS更新IPv6记录：$record_name -> $ipv6"
+    
+    # 获取现有记录
+    local record=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?name=$record_name&type=AAAA" \
+        -H "Authorization: Bearer $api_token" \
+        -H "Content-Type: application/json")
+    
+    local record_id=$(echo "$record" | grep -oP '(?<="id":")[^"]+' | head -1)
+    
+    if [[ -n "$record_id" ]]; then
+        # 更新记录
+        curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+            -H "Authorization: Bearer $api_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"type\":\"AAAA\",\"name\":\"$record_name\",\"content\":\"$ipv6\",\"ttl\":120,\"proxied\":false}" >/dev/null 2>&1
+    else
+        # 创建记录
+        curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
+            -H "Authorization: Bearer $api_token" \
+            -H "Content-Type: application/json" \
+            -d "{\"type\":\"AAAA\",\"name\":\"$record_name\",\"content\":\"$ipv6\",\"ttl\":120,\"proxied\":false}" >/dev/null 2>&1
+    fi
+    
+    if [[ $? -eq 0 ]]; then
+        echo_success "Cloudflare DDNS更新成功"
+        return 0
+    else
+        echo_error "Cloudflare DDNS更新失败"
+        return 1
+    fi
+}
+
+# 设置IPv6 DDNS
+auth_aliyun_ddns() {
+    local access_key_id=$1
+    local access_key_secret=$2
+    local domain=$3
+    local record_type=$4
+    local value=$5
+    local rr=$6
+    
+    echo_info "使用阿里云DDNS更新记录：$rr.$domain -> $value"
+    
+    # 这里需要实现阿里云DDNS API调用
+    # 由于阿里云API签名复杂，这里简化处理
+    echo_warning "阿里云DDNS功能正在开发中"
+    return 0
+}
+
+# 交互式设置IPv6 DDNS
+setup_ipv6_ddns() {
+    echo_info "开始配置IPv6 DDNS..."
+    
+    # 选择DDNS服务提供商
+    echo "支持的DDNS服务提供商："
+    echo "1. Cloudflare"
+    echo "2. 阿里云"
+    echo "3. DynDNS"
+    echo "4. No-IP"
+    
+    read -p "请选择DDNS服务提供商 (1-4) [1]: " ddns_provider
+    ddns_provider=${ddns_provider:-1}
+    
+    # 获取IPv6地址（不带CIDR）
+    local ipv6_addr=$(echo "$IPV6_ADDR" | cut -d '/' -f 1)
+    
+    case $ddns_provider in
+        1)
+            # Cloudflare
+            read -p "请输入Cloudflare API Token: " cloudflare_token
+            read -p "请输入Zone ID: " cloudflare_zone_id
+            read -p "请输入域名 (如: example.com): " cloudflare_domain
+            read -p "请输入记录名 (如: ipv6): " cloudflare_record_name
+            
+            # 构建完整记录名
+            local full_record_name="${cloudflare_record_name}.${cloudflare_domain}"
+            auth_cloudflare_ddns "$cloudflare_token" "$cloudflare_zone_id" "$full_record_name" "$ipv6_addr"
+            ;;
+        2)
+            # 阿里云
+            read -p "请输入Access Key ID: " aliyun_key_id
+            read -p "请输入Access Key Secret: " aliyun_key_secret
+            read -p "请输入域名 (如: example.com): " aliyun_domain
+            read -p "请输入记录名 (如: ipv6): " aliyun_record_name
+            
+            auth_aliyun_ddns "$aliyun_key_id" "$aliyun_key_secret" "$aliyun_domain" "AAAA" "$ipv6_addr" "$aliyun_record_name"
+            ;;
+        3)
+            # DynDNS
+            echo_warning "DynDNS功能正在开发中"
+            ;;
+        4)
+            # No-IP
+            echo_warning "No-IP功能正在开发中"
+            ;;
+        *)
+            echo_error "无效的DDNS服务提供商"
+            ;;
+    esac
+    
+    # 创建DDNS更新脚本
+    create_ddns_update_script
+}
+
+# 创建DDNS更新脚本
+create_ddns_update_script() {
+    echo_info "创建DDNS自动更新脚本..."
+    
+    # 替换INTERFACE变量
+    cat > /opt/dnsha/update_ddns.sh << EOF
+#!/bin/bash
+# DNSHA DDNS自动更新脚本
+# 用于定期更新IPv6地址到DDNS服务
+
+LOG_FILE="/var/log/dnsha_ddns.log"
+INTERFACE="$NET_INTERFACE"
+
+log() {
+    local level=\$1
+    local msg=\$2
+    local timestamp=\$(date +"%Y-%m-%d %H:%M:%S")
+    echo "[\$timestamp] [\$level] \$msg" >> "\$LOG_FILE"
+}
+
+# 获取当前IPv6地址
+get_current_ipv6() {
+    ip -o -6 addr show "\$INTERFACE" | grep -v 'fe80::' | awk '{print \$4}' | cut -d '/' -f 1 | head -1
+}
+
+# 这里添加DDNS更新逻辑
+# 用户需要根据选择的DDNS服务提供商，手动配置更新命令
+
+log "INFO" "DDNS更新脚本执行完成"
+EOF
+    
+    chmod +x /opt/dnsha/update_ddns.sh
+    
+    # 创建systemd定时器
+    cat > /etc/systemd/system/dnsha_ddns.timer << 'EOF'
+[Unit]
+Description=DNSHA DDNS Update Timer
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec=1h
+
+[Install]
+WantedBy=timers.target
+EOF
+    
+    cat > /etc/systemd/system/dnsha_ddns.service << 'EOF'
+[Unit]
+Description=DNSHA DDNS Update Service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/dnsha/update_ddns.sh
+
+[Install]
+WantedBy=multi-user.target
+EOF
+    
+    systemctl daemon-reload >/dev/null 2>&1
+    systemctl enable dnsha_ddns.timer >/dev/null 2>&1
+    systemctl start dnsha_ddns.timer >/dev/null 2>&1
+    
+    echo_success "DDNS自动更新脚本已创建，每小时执行一次"
+}
+
 # 主函数
 main() {
     echo -e "${BLUE}=====================================${NC}"
@@ -369,7 +598,8 @@ main() {
     echo -e "基于 SmartDNS + AdGuard Home 构建高可用DNS服务"
     echo -e "支持 VRRP/Haproxy/Consul 三种容灾模式"
     echo -e "自动检测当地运营商并配置最优DNS"
-    echo -e "支持设置固定IPv4/IPv6地址"
+    echo -e "支持交互式设置固定IPv4/IPv6地址"
+    echo -e "支持IPv6 DDNS域名绑定"
     echo -e "${BLUE}=====================================${NC}\n"
     
     # 检查root权限
@@ -385,6 +615,11 @@ main() {
     
     # 检测网卡
     detect_interface
+    
+    # 如果没有通过命令行指定IP，进入交互模式
+    if [[ -z "$IPV4_ADDR" && -z "$IPV6_ADDR" ]]; then
+        interactive_ip_setup
+    fi
     
     # 设置IPv4（如果提供了）
     if [[ -n "$IPV4_ADDR" && -n "$IPV4_GATEWAY" ]]; then
@@ -433,6 +668,8 @@ main() {
     echo -e "  /opt/dnsha/deploy_dns.sh --help"
     echo -e "\n  # 查看健康检查"
     echo -e "  /opt/dnsha/health_check.sh --help"
+    echo -e "\n  # 手动更新DDNS"
+    echo -e "  /opt/dnsha/update_ddns.sh"
     echo -e "${BLUE}=====================================${NC}"
 }
 
