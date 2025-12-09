@@ -208,30 +208,83 @@ EOF
     fi
 }
 
-# 设置固定IPv6地址
+# 设置IPv6地址（支持固定IP和DHCP）
 set_ipv6() {
-    local ipv6=$1
-    local gateway=$2
-    local interface=$3
+    local interface=$1
+    local ipv6=$2
+    local gateway=$3
+    local mode=$4
     
-    echo_info "设置固定IPv6地址：$ipv6，网关：$gateway，网卡：$interface"
-    
-    # 获取当前网络配置文件
-    local netplan_files=($(ls /etc/netplan/*.yaml 2>/dev/null))
-    local netplan_file
-    
-    if [[ ${#netplan_files[@]} -gt 0 ]]; then
-        # 使用netplan配置
-        netplan_file="${netplan_files[0]}"
+    if [[ "$mode" == "dhcp" || -z "$ipv6" ]]; then
+        echo_info "设置IPv6 DHCP自动获取，网卡：$interface"
         
-        # 检查是否已包含IPv6配置
-        if grep -q "addresses" "$netplan_file" && grep -q "gateway4" "$netplan_file"; then
-            # 修改现有配置，添加IPv6
-            sed -i "/addresses:/ s/\]$/, $ipv6\]/" "$netplan_file"
-            sed -i "/gateway4:/ a\      gateway6: $gateway" "$netplan_file"
+        # 获取当前网络配置文件
+        local netplan_files=($(ls /etc/netplan/*.yaml 2>/dev/null))
+        local netplan_file
+        
+        if [[ ${#netplan_files[@]} -gt 0 ]]; then
+            # 使用netplan配置
+            netplan_file="${netplan_files[0]}"
+            
+            # 检查是否已包含IPv6配置
+            if grep -q "addresses" "$netplan_file"; then
+                # 修改现有配置，启用IPv6 DHCP
+                sed -i "/addresses:/a\      dhcp6: true" "$netplan_file"
+                sed -i "/gateway6:/d" "$netplan_file" 2>/dev/null
+            else
+                # 创建新的配置
+                cat > "$netplan_file" << EOF
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    $interface:
+      dhcp4: true
+      dhcp6: true
+EOF
+            fi
+            
+            # 应用配置
+            netplan apply >/dev/null 2>&1 || echo_error "netplan apply失败"
+            echo_success "IPv6 DHCP设置完成"
+            return 0
         else
-            # 创建新的配置
-            cat > "$netplan_file" << EOF
+            # 使用传统方式配置
+            # 备份当前配置
+            cp /etc/network/interfaces "/etc/network/interfaces.bak"
+            
+            # 添加IPv6 DHCP配置
+            cat >> /etc/network/interfaces << EOF
+
+iface $interface inet6 dhcp
+EOF
+            
+            # 重启网络服务
+            systemctl restart networking >/dev/null 2>&1 || echo_error "重启网络服务失败"
+            echo_success "IPv6 DHCP设置完成"
+            return 0
+        fi
+    else
+        # 固定IPv6地址配置
+        echo_info "设置固定IPv6地址：$ipv6，网关：$gateway，网卡：$interface"
+        
+        # 获取当前网络配置文件
+        local netplan_files=($(ls /etc/netplan/*.yaml 2>/dev/null))
+        local netplan_file
+        
+        if [[ ${#netplan_files[@]} -gt 0 ]]; then
+            # 使用netplan配置
+            netplan_file="${netplan_files[0]}"
+            
+            # 检查是否已包含IPv6配置
+            if grep -q "addresses" "$netplan_file" && grep -q "gateway4" "$netplan_file"; then
+                # 修改现有配置，添加IPv6
+                sed -i "/addresses:/ s/\]$/, $ipv6\]/" "$netplan_file"
+                sed -i "/gateway4:/ a\      gateway6: $gateway" "$netplan_file"
+                sed -i "/dhcp6:/d" "$netplan_file" 2>/dev/null
+            else
+                # 创建新的配置
+                cat > "$netplan_file" << EOF
 network:
   version: 2
   renderer: networkd
@@ -242,30 +295,31 @@ network:
       nameservers:
         addresses: [2001:4860:4860::8888, 2001:4860:4860::8844]
 EOF
-        fi
-        
-        # 应用配置
-        netplan apply >/dev/null 2>&1 || echo_error "netplan apply失败"
-        echo_success "IPv6地址设置完成"
-        return 0
-    else
-        # 使用传统方式配置
-        # 备份当前配置
-        cp /etc/network/interfaces "/etc/network/interfaces.bak"
-        
-        # 添加IPv6配置
-        cat >> /etc/network/interfaces << EOF
+            fi
+            
+            # 应用配置
+            netplan apply >/dev/null 2>&1 || echo_error "netplan apply失败"
+            echo_success "固定IPv6地址设置完成"
+            return 0
+        else
+            # 使用传统方式配置
+            # 备份当前配置
+            cp /etc/network/interfaces "/etc/network/interfaces.bak"
+            
+            # 添加IPv6配置
+            cat >> /etc/network/interfaces << EOF
 
 iface $interface inet6 static
     address $ipv6
     gateway $gateway
     dns-nameservers 2001:4860:4860::8888 2001:4860:4860::8844
 EOF
-        
-        # 重启网络服务
-        systemctl restart networking >/dev/null 2>&1 || echo_error "重启网络服务失败"
-        echo_success "IPv6地址设置完成"
-        return 0
+            
+            # 重启网络服务
+            systemctl restart networking >/dev/null 2>&1 || echo_error "重启网络服务失败"
+            echo_success "固定IPv6地址设置完成"
+            return 0
+        fi
     fi
 }
 
@@ -386,11 +440,15 @@ interactive_ip_setup() {
             IPV4_GATEWAY=${IPV4_GATEWAY:-$current_gateway}
         fi
         
-        # 询问IPv6设置
-        read -p "是否设置固定IPv6？(y/n) [y]: " set_ipv6_flag
-        set_ipv6_flag=${set_ipv6_flag:-y}
+        # 询问IPv6设置方式
+        echo "IPv6获取方式："
+        echo "1. 固定IP地址"
+        echo "2. DHCP自动获取"
+        read -p "请选择IPv6获取方式 (1-2) [2]: " ipv6_mode
+        ipv6_mode=${ipv6_mode:-2}
         
-        if [[ "$set_ipv6_flag" == "y" || "$set_ipv6_flag" == "Y" ]]; then
+        if [[ $ipv6_mode -eq 1 ]]; then
+            # 固定IPv6设置
             # 获取当前IPv6信息
             local current_ipv6=$(ip -o -6 addr show "$NET_INTERFACE" | grep -v 'fe80::' | awk '{print $4}' | head -1)
             
@@ -404,8 +462,20 @@ interactive_ip_setup() {
             IPV6_GATEWAY=${IPV6_GATEWAY:-$default_ipv6_gateway}
             
             # 询问IPv6 DDNS绑定
-            read -p "是否为IPv6绑定DDNS域名？(y/n) [n]: " set_ddns_flag
-            set_ddns_flag=${set_ddns_flag:-n}
+            read -p "是否为IPv6绑定DDNS域名？(y/n) [y]: " set_ddns_flag
+            set_ddns_flag=${set_ddns_flag:-y}
+            
+            if [[ "$set_ddns_flag" == "y" || "$set_ddns_flag" == "Y" ]]; then
+                setup_ipv6_ddns
+            fi
+        else
+            # DHCP方式
+            echo_info "使用IPv6 DHCP自动获取地址"
+            IPV6_MODE="dhcp"
+            
+            # 询问IPv6 DDNS绑定
+            read -p "是否为IPv6绑定DDNS域名？(y/n) [y]: " set_ddns_flag
+            set_ddns_flag=${set_ddns_flag:-y}
             
             if [[ "$set_ddns_flag" == "y" || "$set_ddns_flag" == "Y" ]]; then
                 setup_ipv6_ddns
@@ -474,70 +544,56 @@ auth_aliyun_ddns() {
 setup_ipv6_ddns() {
     echo_info "开始配置IPv6 DDNS..."
     
-    # 选择DDNS服务提供商
-    echo "支持的DDNS服务提供商："
-    echo "1. Cloudflare"
-    echo "2. 阿里云"
-    echo "3. DynDNS"
-    echo "4. No-IP"
+    # 只支持Cloudflare
+    echo "使用Cloudflare DDNS服务"
     
-    read -p "请选择DDNS服务提供商 (1-4) [1]: " ddns_provider
-    ddns_provider=${ddns_provider:-1}
+    # 获取当前IPv6地址（不带CIDR）
+    local current_ipv6
+    if [[ -n "$IPV6_ADDR" ]]; then
+        current_ipv6=$(echo "$IPV6_ADDR" | cut -d '/' -f 1)
+    else
+        # 如果是DHCP模式，获取当前IPv6地址
+        current_ipv6=$(ip -o -6 addr show "$NET_INTERFACE" | grep -v 'fe80::' | awk '{print $4}' | cut -d '/' -f 1 | head -1)
+    fi
     
-    # 获取IPv6地址（不带CIDR）
-    local ipv6_addr=$(echo "$IPV6_ADDR" | cut -d '/' -f 1)
+    # Cloudflare配置
+    read -p "请输入Cloudflare API Token: " CLOUDFLARE_TOKEN
+    read -p "请输入Zone ID: " CLOUDFLARE_ZONE_ID
+    read -p "请输入域名 (如: example.com): " CLOUDFLARE_DOMAIN
+    read -p "请输入记录名 (如: ipv6): " CLOUDFLARE_RECORD_NAME
     
-    case $ddns_provider in
-        1)
-            # Cloudflare
-            read -p "请输入Cloudflare API Token: " cloudflare_token
-            read -p "请输入Zone ID: " cloudflare_zone_id
-            read -p "请输入域名 (如: example.com): " cloudflare_domain
-            read -p "请输入记录名 (如: ipv6): " cloudflare_record_name
-            
-            # 构建完整记录名
-            local full_record_name="${cloudflare_record_name}.${cloudflare_domain}"
-            auth_cloudflare_ddns "$cloudflare_token" "$cloudflare_zone_id" "$full_record_name" "$ipv6_addr"
-            ;;
-        2)
-            # 阿里云
-            read -p "请输入Access Key ID: " aliyun_key_id
-            read -p "请输入Access Key Secret: " aliyun_key_secret
-            read -p "请输入域名 (如: example.com): " aliyun_domain
-            read -p "请输入记录名 (如: ipv6): " aliyun_record_name
-            
-            auth_aliyun_ddns "$aliyun_key_id" "$aliyun_key_secret" "$aliyun_domain" "AAAA" "$ipv6_addr" "$aliyun_record_name"
-            ;;
-        3)
-            # DynDNS
-            echo_warning "DynDNS功能正在开发中"
-            ;;
-        4)
-            # No-IP
-            echo_warning "No-IP功能正在开发中"
-            ;;
-        *)
-            echo_error "无效的DDNS服务提供商"
-            ;;
-    esac
+    # 构建完整记录名
+    local full_record_name="${CLOUDFLARE_RECORD_NAME}.${CLOUDFLARE_DOMAIN}"
+    
+    # 立即更新一次DDNS
+    auth_cloudflare_ddns "$CLOUDFLARE_TOKEN" "$CLOUDFLARE_ZONE_ID" "$full_record_name" "$current_ipv6"
     
     # 创建DDNS更新脚本
-    create_ddns_update_script
+    create_cloudflare_ddns_script "$CLOUDFLARE_TOKEN" "$CLOUDFLARE_ZONE_ID" "$full_record_name"
 }
 
-# 创建DDNS更新脚本
-create_ddns_update_script() {
-    echo_info "创建DDNS自动更新脚本..."
+# 创建Cloudflare DDNS自动更新脚本
+create_cloudflare_ddns_script() {
+    local token=$1
+    local zone_id=$2
+    local record_name=$3
     
-    # 替换INTERFACE变量
-    cat > /opt/dnsha/update_ddns.sh << EOF
+    echo_info "创建Cloudflare DDNS自动更新脚本..."
+    
+    # 创建DDNS更新脚本
+    cat > /opt/dnsha/cloudflare_ddns.sh << EOF
 #!/bin/bash
-# DNSHA DDNS自动更新脚本
-# 用于定期更新IPv6地址到DDNS服务
+# DNSHA Cloudflare DDNS自动更新脚本
+# 用于定期更新IPv6地址到Cloudflare
 
-LOG_FILE="/var/log/dnsha_ddns.log"
+# 配置参数
+LOG_FILE="/var/log/cloudflare_ddns.log"
 INTERFACE="$NET_INTERFACE"
+CLOUDFLARE_TOKEN="$token"
+CLOUDFLARE_ZONE_ID="$zone_id"
+CLOUDFLARE_RECORD_NAME="$record_name"
 
+# 日志函数
 log() {
     local level=\$1
     local msg=\$2
@@ -550,18 +606,95 @@ get_current_ipv6() {
     ip -o -6 addr show "\$INTERFACE" | grep -v 'fe80::' | awk '{print \$4}' | cut -d '/' -f 1 | head -1
 }
 
-# 这里添加DDNS更新逻辑
-# 用户需要根据选择的DDNS服务提供商，手动配置更新命令
+# 获取当前Cloudflare记录
+get_cloudflare_record() {
+    curl -s -X GET "https://api.cloudflare.com/client/v4/zones/\${CLOUDFLARE_ZONE_ID}/dns_records?name=\${CLOUDFLARE_RECORD_NAME}&type=AAAA" \
+        -H "Authorization: Bearer \${CLOUDFLARE_TOKEN}" \
+        -H "Content-Type: application/json"
+}
 
-log "INFO" "DDNS更新脚本执行完成"
+# 更新Cloudflare记录
+update_cloudflare_record() {
+    local record_id=\$1
+    local ipv6=\$2
+    
+    curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/\${CLOUDFLARE_ZONE_ID}/dns_records/\${record_id}" \
+        -H "Authorization: Bearer \${CLOUDFLARE_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"type\":\"AAAA\",\"name\":\"\${CLOUDFLARE_RECORD_NAME}\",\"content\":\"\${ipv6}\",\"ttl\":120,\"proxied\":false}" >/dev/null 2>&1
+    
+    return \$?
+}
+
+# 创建Cloudflare记录
+create_cloudflare_record() {
+    local ipv6=\$1
+    
+    curl -s -X POST "https://api.cloudflare.com/client/v4/zones/\${CLOUDFLARE_ZONE_ID}/dns_records" \
+        -H "Authorization: Bearer \${CLOUDFLARE_TOKEN}" \
+        -H "Content-Type: application/json" \
+        -d "{\"type\":\"AAAA\",\"name\":\"\${CLOUDFLARE_RECORD_NAME}\",\"content\":\"\${ipv6}\",\"ttl\":120,\"proxied\":false}" >/dev/null 2>&1
+    
+    return \$?
+}
+
+# 主函数
+main() {
+    log "INFO" "开始执行Cloudflare DDNS更新"
+    
+    # 获取当前IPv6地址
+    local current_ipv6=\$(get_current_ipv6)
+    if [[ -z "\$current_ipv6" ]]; then
+        log "ERROR" "无法获取当前IPv6地址"
+        exit 1
+    fi
+    log "INFO" "当前IPv6地址：\${current_ipv6}"
+    
+    # 获取Cloudflare记录
+    local record=\$(get_cloudflare_record)
+    local record_id=\$(echo "\$record" | grep -oP '(?<="id":")[^"]+' | head -1)
+    local record_content=\$(echo "\$record" | grep -oP '(?<="content":")[^"]+' | head -1)
+    
+    # 比较IPv6地址是否变化
+    if [[ "\$current_ipv6" == "\$record_content" ]]; then
+        log "INFO" "IPv6地址未变化，无需更新"
+        exit 0
+    fi
+    
+    # 更新或创建记录
+    if [[ -n "\$record_id" ]]; then
+        log "INFO" "更新Cloudflare记录：\${CLOUDFLARE_RECORD_NAME} -> \${current_ipv6}"
+        update_cloudflare_record "\$record_id" "\$current_ipv6"
+        if [[ \$? -eq 0 ]]; then
+            log "INFO" "Cloudflare记录更新成功"
+            exit 0
+        else
+            log "ERROR" "Cloudflare记录更新失败"
+            exit 1
+        fi
+    else
+        log "INFO" "创建Cloudflare记录：\${CLOUDFLARE_RECORD_NAME} -> \${current_ipv6}"
+        create_cloudflare_record "\$current_ipv6"
+        if [[ \$? -eq 0 ]]; then
+            log "INFO" "Cloudflare记录创建成功"
+            exit 0
+        else
+            log "ERROR" "Cloudflare记录创建失败"
+            exit 1
+        fi
+    fi
+}
+
+# 执行主函数
+main
 EOF
     
-    chmod +x /opt/dnsha/update_ddns.sh
+    chmod +x /opt/dnsha/cloudflare_ddns.sh
     
     # 创建systemd定时器
-    cat > /etc/systemd/system/dnsha_ddns.timer << 'EOF'
+    cat > /etc/systemd/system/cloudflare_ddns.timer << 'EOF'
 [Unit]
-Description=DNSHA DDNS Update Timer
+Description=Cloudflare DDNS Update Timer
 
 [Timer]
 OnBootSec=5min
@@ -571,23 +704,29 @@ OnUnitActiveSec=1h
 WantedBy=timers.target
 EOF
     
-    cat > /etc/systemd/system/dnsha_ddns.service << 'EOF'
+    cat > /etc/systemd/system/cloudflare_ddns.service << 'EOF'
 [Unit]
-Description=DNSHA DDNS Update Service
+Description=Cloudflare DDNS Update Service
 
 [Service]
 Type=oneshot
-ExecStart=/opt/dnsha/update_ddns.sh
+ExecStart=/opt/dnsha/cloudflare_ddns.sh
 
 [Install]
 WantedBy=multi-user.target
 EOF
     
-    systemctl daemon-reload >/dev/null 2>&1
-    systemctl enable dnsha_ddns.timer >/dev/null 2>&1
-    systemctl start dnsha_ddns.timer >/dev/null 2>&1
+    # 清理旧的定时器（如果存在）
+    systemctl stop dnsha_ddns.timer 2>/dev/null
+    systemctl disable dnsha_ddns.timer 2>/dev/null
+    rm -f /etc/systemd/system/dnsha_ddns.timer /etc/systemd/system/dnsha_ddns.service /opt/dnsha/update_ddns.sh 2>/dev/null
     
-    echo_success "DDNS自动更新脚本已创建，每小时执行一次"
+    # 启用新的定时器
+    systemctl daemon-reload >/dev/null 2>&1
+    systemctl enable cloudflare_ddns.timer >/dev/null 2>&1
+    systemctl start cloudflare_ddns.timer >/dev/null 2>&1
+    
+    echo_success "Cloudflare DDNS自动更新脚本已创建，每小时执行一次"
 }
 
 # 主函数
@@ -599,7 +738,8 @@ main() {
     echo -e "支持 VRRP/Haproxy/Consul 三种容灾模式"
     echo -e "自动检测当地运营商并配置最优DNS"
     echo -e "支持交互式设置固定IPv4/IPv6地址"
-    echo -e "支持IPv6 DDNS域名绑定"
+    echo -e "支持IPv6 DHCP自动获取地址"
+    echo -e "支持Cloudflare DDNS域名绑定"
     echo -e "${BLUE}=====================================${NC}\n"
     
     # 检查root权限
@@ -628,9 +768,11 @@ main() {
         echo_error "设置IPv4时必须同时提供IPv4地址和网关"
     fi
     
-    # 设置IPv6（如果提供了）
+    # 设置IPv6
     if [[ -n "$IPV6_ADDR" && -n "$IPV6_GATEWAY" ]]; then
-        set_ipv6 "$IPV6_ADDR" "$IPV6_GATEWAY" "$NET_INTERFACE"
+        set_ipv6 "$NET_INTERFACE" "$IPV6_ADDR" "$IPV6_GATEWAY" "static"
+    elif [[ "$IPV6_MODE" == "dhcp" || -z "$IPV6_ADDR" ]]; then
+        set_ipv6 "$NET_INTERFACE" "" "" "dhcp"
     elif [[ -n "$IPV6_ADDR" || -n "$IPV6_GATEWAY" ]]; then
         echo_error "设置IPv6时必须同时提供IPv6地址和网关"
     fi
@@ -668,8 +810,10 @@ main() {
     echo -e "  /opt/dnsha/deploy_dns.sh --help"
     echo -e "\n  # 查看健康检查"
     echo -e "  /opt/dnsha/health_check.sh --help"
-    echo -e "\n  # 手动更新DDNS"
-    echo -e "  /opt/dnsha/update_ddns.sh"
+    echo -e "\n  # 手动更新Cloudflare DDNS"
+    echo -e "  /opt/dnsha/cloudflare_ddns.sh"
+    echo -e "\n  # 查看DDNS更新日志"
+    echo -e "  tail -f /var/log/cloudflare_ddns.log"
     echo -e "${BLUE}=====================================${NC}"
 }
 
