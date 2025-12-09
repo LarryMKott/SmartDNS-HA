@@ -772,6 +772,40 @@ main() {
     # 检测系统
     detect_system
     
+# 配置国内加速服务
+setup_cn_mirror() {
+    echo_info "配置国内加速服务..."
+    
+    # 更新软件源为国内镜像
+    echo_info "更新软件源为国内镜像..."
+    if [[ -f /etc/apt/sources.list ]]; then
+        # 备份原有源
+        cp /etc/apt/sources.list /etc/apt/sources.list.bak
+        
+        # 使用中科大Debian 13镜像源
+        cat > /etc/apt/sources.list << EOF
+# 中科大Debian 13镜像源
+deb https://mirrors.ustc.edu.cn/debian/ trixie main contrib non-free non-free-firmware
+deb-src https://mirrors.ustc.edu.cn/debian/ trixie main contrib non-free non-free-firmware
+deb https://mirrors.ustc.edu.cn/debian/ trixie-updates main contrib non-free non-free-firmware
+deb-src https://mirrors.ustc.edu.cn/debian/ trixie-updates main contrib non-free non-free-firmware
+deb https://mirrors.ustc.edu.cn/debian/ trixie-backports main contrib non-free non-free-firmware
+deb-src https://mirrors.ustc.edu.cn/debian/ trixie-backports main contrib non-free non-free-firmware
+deb https://mirrors.ustc.edu.cn/debian-security/ trixie-security main contrib non-free non-free-firmware
+deb-src https://mirrors.ustc.edu.cn/debian-security/ trixie-security main contrib non-free non-free-firmware
+EOF
+        
+        # 更新软件包列表
+        apt-get update >/dev/null 2>&1
+        echo_success "软件源已更新为国内镜像"
+    fi
+    
+    # 配置GitHub代理
+    git config --global url."https://gh-proxy.org/https://github.com/".insteadOf "https://github.com/"
+    git config --global url."https://gh-proxy.org/https://raw.githubusercontent.com/".insteadOf "https://raw.githubusercontent.com/"
+    echo_success "GitHub代理已配置"
+}
+
     # 配置国内加速（如果启用）
     if [[ "$USE_CN_MIRROR" == "true" ]]; then
         setup_cn_mirror
