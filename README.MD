@@ -1,5 +1,5 @@
 # DNSHA
-
+0
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Shell Script](https://img.shields.io/badge/Shell-Script-89e051.svg)](https://www.gnu.org/software/bash/)
 [![Debian](https://img.shields.io/badge/OS-Debian%2013+-blue.svg)](https://www.debian.org/)
@@ -33,13 +33,13 @@ DNSHA 是一款**纯Shell实现**的DNS主备容灾一键部署系统，基于 S
 ## 🚀 快速开始
 ### 1. 一键安装（推荐）
 
-#### 国内用户（推荐使用国内加速）
+#### 国内加速安装（使用gh-proxy.org加速GitHub访问）
 ```bash
-# 国内加速安装（使用ghproxy.com加速GitHub访问）
-curl -fsSL https://ghproxy.com/https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- --cn
+# 国内加速安装（使用gh-proxy.org加速GitHub访问）
+curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- --cn
 
 # 国内加速+固定IPv4配置
-curl -fsSL https://ghproxy.com/https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- --cn \
+curl -fsSL https://gh-proxy.org/https://raw.githubusercontent.com/LarryMKott/SmartDNS-HA/master/install.sh | bash -s -- --cn \
   --ipv4 192.168.1.100/24 --gateway 192.168.1.1
 
 # 国内加速+IPv4+IPv6配置

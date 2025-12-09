@@ -18,6 +18,7 @@ Options:
   --ipv6, -6 <IP/CIDR>     设置固定IPv6地址（如：2001:db8::1/64）
   --ipv6-gateway, -G <IP>   设置IPv6网关
   --interface, -i <IFACE>   指定网卡接口（默认自动检测）
+  --cn                     使用国内镜像和加速服务
   --help, -h               显示帮助信息
 
 Examples:
@@ -40,6 +41,9 @@ GREEN="\033[32m"
 YELLOW="\033[33m"
 BLUE="\033[34m"
 NC="\033[0m"
+
+# 全局变量
+USE_CN_MIRROR="false"
 
 # 日志函数
 log() {
@@ -89,6 +93,10 @@ parse_args() {
             --interface|-i)
                 NET_INTERFACE="$2"
                 shift 2
+                ;;
+            --cn)
+                USE_CN_MIRROR="true"
+                shift 1
                 ;;
             --help|-h)
                 show_help
@@ -408,7 +416,7 @@ install_dnsha() {
     
     if [[ "$USE_CN_MIRROR" == "true" ]]; then
         repo_url="https://gitee.com/mirrors/SmartDNS-HA.git"
-        zip_url="https://ghproxy.com/$zip_url"
+        zip_url="https://gh-proxy.org/$zip_url"
         echo_info "使用国内镜像：$repo_url"
     fi
     
