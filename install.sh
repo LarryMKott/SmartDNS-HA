@@ -6,6 +6,34 @@
 # License: MIT
 # Version: 1.0.0
 
+# 显示帮助信息
+show_help() {
+    cat << EOF
+DNSHA 一键安装脚本
+Usage: $0 [OPTIONS]
+
+Options:
+  --ipv4, -4 <IP/CIDR>     设置固定IPv4地址（如：192.168.1.100/24）
+  --gateway, -g <IP>        设置IPv4网关
+  --ipv6, -6 <IP/CIDR>     设置固定IPv6地址（如：2001:db8::1/64）
+  --ipv6-gateway, -G <IP>   设置IPv6网关
+  --interface, -i <IFACE>   指定网卡接口（默认自动检测）
+  --help, -h               显示帮助信息
+
+Examples:
+  # 默认安装（自动检测运营商DNS）
+  $0
+  
+  # 设置固定IPv4
+  $0 --ipv4 192.168.1.100/24 --gateway 192.168.1.1
+  
+  # 设置IPv4+IPv6
+  $0 --ipv4 192.168.1.100/24 --gateway 192.168.1.1 \
+     --ipv6 2001:db8::1/64 --ipv6-gateway 2001:db8::fffe
+EOF
+    exit 0
+}
+
 # 颜色定义
 RED="\033[31m"
 GREEN="\033[32m"
@@ -38,6 +66,40 @@ echo_info() {
     log "${BLUE}INFO${NC}" "$1"
 }
 
+# 解析命令行参数
+parse_args() {
+    while [[ $# -gt 0 ]]; do
+        case $1 in
+            --ipv4|-4)
+                IPV4_ADDR="$2"
+                shift 2
+                ;;
+            --gateway|-g)
+                IPV4_GATEWAY="$2"
+                shift 2
+                ;;
+            --ipv6|-6)
+                IPV6_ADDR="$2"
+                shift 2
+                ;;
+            --ipv6-gateway|-G)
+                IPV6_GATEWAY="$2"
+                shift 2
+                ;;
+            --interface|-i)
+                NET_INTERFACE="$2"
+                shift 2
+                ;;
+            --help|-h)
+                show_help
+                ;;
+            *)
+                echo_error "未知参数：$1"
+                ;;
+        esac
+    done
+}
+
 # 检测当前系统
 detect_system() {
     echo_info "检测当前系统..."
@@ -51,6 +113,159 @@ detect_system() {
         return 0
     else
         echo_error "当前系统不是Debian，不支持一键安装"
+    fi
+}
+
+# 检测主要网卡
+detect_interface() {
+    echo_info "检测主要网卡..."
+    
+    # 如果用户指定了网卡，直接使用
+    if [[ -n "$NET_INTERFACE" ]]; then
+        echo_success "使用指定网卡：$NET_INTERFACE"
+        return 0
+    fi
+    
+    # 自动检测主要网卡（默认网关所在的网卡）
+    local default_interface=$(ip route show default | awk '{print $5}' | head -1)
+    if [[ -n "$default_interface" ]]; then
+        NET_INTERFACE="$default_interface"
+        echo_success "自动检测到主要网卡：$NET_INTERFACE"
+        return 0
+    fi
+    
+    # 备用检测方式
+    default_interface=$(ip -o -4 addr show | grep -v 'lo:' | head -1 | awk '{print $2}')
+    if [[ -n "$default_interface" ]]; then
+        NET_INTERFACE="$default_interface"
+        echo_success "备用检测到网卡：$NET_INTERFACE"
+        return 0
+    fi
+    
+    echo_error "无法检测到网卡，请使用 --interface 参数指定"
+}
+
+# 设置固定IPv4地址
+set_ipv4() {
+    local ipv4=$1
+    local gateway=$2
+    local interface=$3
+    
+    echo_info "设置固定IPv4地址：$ipv4，网关：$gateway，网卡：$interface"
+    
+    # 获取当前网络配置文件
+    local netplan_files=($(ls /etc/netplan/*.yaml 2>/dev/null))
+    local netplan_file
+    
+    if [[ ${#netplan_files[@]} -gt 0 ]]; then
+        # 使用netplan配置
+        netplan_file="${netplan_files[0]}"
+        echo_info "使用netplan配置文件：$netplan_file"
+        
+        # 备份当前配置
+        cp "$netplan_file" "${netplan_file}.bak"
+        
+        # 生成新的netplan配置
+        cat > "$netplan_file" << EOF
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    $interface:
+      addresses: [$ipv4]
+      gateway4: $gateway
+      nameservers:
+        addresses: [114.114.114.114, 8.8.8.8]
+EOF
+        
+        # 应用配置
+        netplan apply >/dev/null 2>&1 || echo_error "netplan apply失败"
+        echo_success "IPv4地址设置完成"
+        return 0
+    else
+        # 使用传统方式配置
+        echo_info "使用传统方式配置网络"
+        
+        # 备份当前配置
+        cp /etc/network/interfaces "/etc/network/interfaces.bak"
+        
+        # 生成新的网络配置
+        cat > /etc/network/interfaces << EOF
+auto lo
+iface lo inet loopback
+
+auto $interface
+iface $interface inet static
+    address $ipv4
+    gateway $gateway
+    dns-nameservers 114.114.114.114 8.8.8.8
+EOF
+        
+        # 重启网络服务
+        systemctl restart networking >/dev/null 2>&1 || echo_error "重启网络服务失败"
+        echo_success "IPv4地址设置完成"
+        return 0
+    fi
+}
+
+# 设置固定IPv6地址
+set_ipv6() {
+    local ipv6=$1
+    local gateway=$2
+    local interface=$3
+    
+    echo_info "设置固定IPv6地址：$ipv6，网关：$gateway，网卡：$interface"
+    
+    # 获取当前网络配置文件
+    local netplan_files=($(ls /etc/netplan/*.yaml 2>/dev/null))
+    local netplan_file
+    
+    if [[ ${#netplan_files[@]} -gt 0 ]]; then
+        # 使用netplan配置
+        netplan_file="${netplan_files[0]}"
+        
+        # 检查是否已包含IPv6配置
+        if grep -q "addresses" "$netplan_file" && grep -q "gateway4" "$netplan_file"; then
+            # 修改现有配置，添加IPv6
+            sed -i "/addresses:/ s/\]$/, $ipv6\]/" "$netplan_file"
+            sed -i "/gateway4:/ a\      gateway6: $gateway" "$netplan_file"
+        else
+            # 创建新的配置
+            cat > "$netplan_file" << EOF
+network:
+  version: 2
+  renderer: networkd
+  ethernets:
+    $interface:
+      addresses: [$ipv6]
+      gateway6: $gateway
+      nameservers:
+        addresses: [2001:4860:4860::8888, 2001:4860:4860::8844]
+EOF
+        fi
+        
+        # 应用配置
+        netplan apply >/dev/null 2>&1 || echo_error "netplan apply失败"
+        echo_success "IPv6地址设置完成"
+        return 0
+    else
+        # 使用传统方式配置
+        # 备份当前配置
+        cp /etc/network/interfaces "/etc/network/interfaces.bak"
+        
+        # 添加IPv6配置
+        cat >> /etc/network/interfaces << EOF
+
+iface $interface inet6 static
+    address $ipv6
+    gateway $gateway
+    dns-nameservers 2001:4860:4860::8888 2001:4860:4860::8844
+EOF
+        
+        # 重启网络服务
+        systemctl restart networking >/dev/null 2>&1 || echo_error "重启网络服务失败"
+        echo_success "IPv6地址设置完成"
+        return 0
     fi
 }
 
@@ -154,6 +369,7 @@ main() {
     echo -e "基于 SmartDNS + AdGuard Home 构建高可用DNS服务"
     echo -e "支持 VRRP/Haproxy/Consul 三种容灾模式"
     echo -e "自动检测当地运营商并配置最优DNS"
+    echo -e "支持设置固定IPv4/IPv6地址"
     echo -e "${BLUE}=====================================${NC}\n"
     
     # 检查root权限
@@ -161,8 +377,28 @@ main() {
         echo_error "请以root用户运行此脚本"
     fi
     
+    # 解析命令行参数
+    parse_args "$@"
+    
     # 检测系统
     detect_system
+    
+    # 检测网卡
+    detect_interface
+    
+    # 设置IPv4（如果提供了）
+    if [[ -n "$IPV4_ADDR" && -n "$IPV4_GATEWAY" ]]; then
+        set_ipv4 "$IPV4_ADDR" "$IPV4_GATEWAY" "$NET_INTERFACE"
+    elif [[ -n "$IPV4_ADDR" || -n "$IPV4_GATEWAY" ]]; then
+        echo_error "设置IPv4时必须同时提供IPv4地址和网关"
+    fi
+    
+    # 设置IPv6（如果提供了）
+    if [[ -n "$IPV6_ADDR" && -n "$IPV6_GATEWAY" ]]; then
+        set_ipv6 "$IPV6_ADDR" "$IPV6_GATEWAY" "$NET_INTERFACE"
+    elif [[ -n "$IPV6_ADDR" || -n "$IPV6_GATEWAY" ]]; then
+        echo_error "设置IPv6时必须同时提供IPv6地址和网关"
+    fi
     
     # 检测运营商
     detect_isp
@@ -182,6 +418,16 @@ main() {
     echo -e "  安装目录：/opt/dnsha"
     echo -e "  检测到运营商：$isp"
     echo -e "  配置的DNS：$dns_servers"
+    
+    # 显示网络配置信息
+    if [[ -n "$IPV4_ADDR" ]]; then
+        echo -e "  IPv4地址：$IPV4_ADDR，网关：$IPV4_GATEWAY"
+    fi
+    if [[ -n "$IPV6_ADDR" ]]; then
+        echo -e "  IPv6地址：$IPV6_ADDR，网关：$IPV6_GATEWAY"
+    fi
+    echo -e "  网卡：$NET_INTERFACE"
+    
     echo -e "\n${YELLOW}接下来可以执行：${NC}"
     echo -e "  # 一键部署主备节点"
     echo -e "  /opt/dnsha/deploy_dns.sh --help"
