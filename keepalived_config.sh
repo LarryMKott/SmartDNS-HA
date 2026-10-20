@@ -187,8 +187,10 @@ global_defs {
     # 注意：vrrp_strict 会禁止 VRRP 认证，和下面的 auth_pass 冲突，二者只能留一个。
     # vrrp_garp_interval / vrrp_gna_interval 不能写 0：keepalived 2.2.x 会判
     # "number '0' outside range" 并让 keepalived -t 失败，这里直接省略用默认值。
-    # 执行 vrrp_script 需要显式开启 script_security，否则报 SECURITY VIOLATION。
-    script_security
+    # 执行 vrrp_script 需要显式开启 enable_script_security，否则报 SECURITY VIOLATION；
+    # 开启后脚本必须以 script_user 指定的用户运行（root 场景下配 root）。
+    enable_script_security
+    script_user root
 }
 
 # DNS服务健康检查脚本
