@@ -100,6 +100,10 @@ parse_args() {
                 FAILOVER_MODE="$2"
                 shift 2
                 ;;
+            --unicast)
+                UNICAST="true"
+                shift
+                ;;
             --help|-h)
                 show_help
                 ;;
@@ -124,6 +128,9 @@ validate_params() {
     
     # 设置默认值
     FAILOVER_MODE=${FAILOVER_MODE:-"vrrp"}
+    
+    # 单播模式：Docker / 云网络通常不放行 VRRP 组播，需要点对点
+    UNICAST=${UNICAST:-"false"}
     
     # VRRP 认证口令：keepalived 只取前 8 位，且两端必须一致
     VRRP_AUTH_PASS=${VRRP_AUTH_PASS:-"dnsha123"}
@@ -230,6 +237,20 @@ vrrp_instance VI_1 {
 }
 EOF
     
+    
+    # 单播模式：组播被网络拦截时改用 unicast_peer 点对点通告
+    if [[ "$UNICAST" == "true" ]]; then
+        local src_ip peer_ip
+        if [[ "$ROLE" == "master" ]]; then
+            src_ip="$MASTER_IP"
+            peer_ip="$SLAVE_IP"
+        else
+            src_ip="$SLAVE_IP"
+            peer_ip="$MASTER_IP"
+        fi
+        sed -i "/advert_int 1/a\    unicast_src_ip $src_ip\n    unicast_peer {\n        $peer_ip\n    }" /etc/keepalived/keepalived.conf
+        echo_info "已启用 VRRP 单播：src=$src_ip peer=$peer_ip"
+    fi
     echo_success "Keepalived配置文件生成完成"
 }
 

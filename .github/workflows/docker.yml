@@ -1,0 +1,37 @@
+name: docker
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  two-node:
+    name: Docker 双节点 VRRP + 跨主机同步
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          docker version --format '{{.Server.Version}}'
+          docker compose version
+
+      - name: 双节点运行态验证
+        run: bash tests/docker/run.sh
+
+      - name: 失败时导出容器日志
+        if: failure()
+        run: |
+          docker compose -f tests/docker/compose.yml ps || true
+          docker compose -f tests/docker/compose.yml logs --no-color --tail 80 || true
+          for f in /tmp/ka1.log /tmp/ka2.log /tmp/sync1.log /tmp/daemon.log /tmp/daemon2.log /tmp/compose_up.log; do
+            if [ -f "$f" ]; then
+              echo "===== $f ====="
+              tail -40 "$f"
+            fi
+          done
