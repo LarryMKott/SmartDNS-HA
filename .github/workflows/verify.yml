@@ -1,0 +1,62 @@
+name: verify
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  selftest:
+    name: 语法与自检断言
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 环境信息
+        run: |
+          bash --version | head -1
+          uname -a
+
+      - name: 全量语法检查
+        run: |
+          set -e
+          shopt -s nullglob
+          files=( *.sh tests/*.sh )
+          for f in "${files[@]}"; do
+            bash -n "$f"
+            echo "OK  $f"
+          done
+
+      - name: 自检断言
+        run: bash tests/selftest.sh
+
+  shellcheck:
+    name: shellcheck（规则级检查，当前为准入参考）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装 shellcheck
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq shellcheck
+          shellcheck --version | head -2
+
+      - name: error 级（硬门禁）
+        run: shellcheck -x -S error *.sh tests/*.sh
+
+      - name: warning 级（仅供参考，不阻断）
+        continue-on-error: true
+        run: shellcheck -x -S warning -f gcc *.sh tests/*.sh || true
+
+      - name: 汇总统计
+        if: always()
+        run: |
+          echo "### shellcheck 统计" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          shellcheck -x -S style -f gcc *.sh 2>/dev/null | awk -F: '{print $4}' | sort | uniq -c | sort -rn | head -15 >> "$GITHUB_STEP_SUMMARY" || true
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
