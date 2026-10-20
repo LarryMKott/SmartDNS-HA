@@ -40,6 +40,7 @@ fi
 cat /root/.ssh/id_rsa.pub >> /root/.ssh/authorized_keys
 chmod 700 /root/.ssh
 chmod 600 /root/.ssh/authorized_keys
+mkdir -p /run/sshd
 /usr/sbin/sshd
 sleep 2
 if ssh -o StrictHostKeyChecking=no -o BatchMode=yes root@127.0.0.1 true 2>/dev/null; then
@@ -189,7 +190,21 @@ fi
 echo
 echo "================ 运行态汇总 ================"
 printf '通过 %d 项，失败 %d 项\n' "$pass" "$fail"
+
 if (( fail > 0 )); then
+    echo
+    echo "================ 失败诊断 ================"
+    for f in /tmp/ka.log /tmp/ka_t.log /tmp/check_dns.log /tmp/hp.log /tmp/hp_c.log \
+             /tmp/vd.log /tmp/hc.log /tmp/deploy.log /var/log/dnsha_sync_daemon.log; do
+        if [[ -f "$f" ]]; then
+            echo "----- $f -----"
+            tail -25 "$f"
+        fi
+    done
+    if [[ -f /etc/keepalived/keepalived.conf ]]; then
+        echo "----- 生成的 keepalived.conf（前 40 行） -----"
+        head -40 /etc/keepalived/keepalived.conf
+    fi
     echo "运行态验证失败"
     exit 1
 fi

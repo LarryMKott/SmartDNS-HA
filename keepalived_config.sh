@@ -184,7 +184,8 @@ global_defs {
     smtp_connect_timeout 30
     router_id DNSHA_${ROLE^^}
     vrrp_skip_check_adv_addr
-    vrrp_strict
+    # 注意：vrrp_strict 会禁止 VRRP 认证，和下面的 auth_pass 冲突，
+    # keepalived -t 会直接报错。二者只能留一个，这里保留认证。
     vrrp_garp_interval 0
     vrrp_gna_interval 0
 }
