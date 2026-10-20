@@ -126,6 +126,8 @@ validate_params() {
     FAILOVER_MODE=${FAILOVER_MODE:-"vrrp"}
     
     # 设置优先级
+    # 不变量：主节点故障后 100 + (-20) = 80，必须小于备节点 90；
+    # 若权重绝对值 <= 主备优先级差，故障后双方平局，由 IP 大小决定谁当 master，故障就不切换了。
     if [[ "$ROLE" == "master" ]]; then
         PRIORITY=${PRIORITY:-100}
     else
@@ -188,7 +190,7 @@ global_defs {
 vrrp_script check_dns_service {
     script "/etc/keepalived/check_dns.sh"
     interval 2
-    weight -10
+    weight -20
     fall 2
     rise 2
 }
