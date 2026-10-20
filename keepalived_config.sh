@@ -313,6 +313,13 @@ EOF
 
 # 配置Haproxy模式（负载均衡）
 config_haproxy() {
+    # haproxy 需要独占 :53，与本机 smartdns/AdGuard 冲突时必须显式拒绝，
+    # 否则 haproxy 起不来但脚本仍会打印「配置完成」。
+    if command -v ss >/dev/null 2>&1 && ss -tln 2>/dev/null | grep -qE ':(53)[[:space:]]'; then
+        echo_error "haproxy 模式需要独占 :53，但本机已有服务监听（smartdns/AdGuard）。请改用 vrrp 模式，或先把 DNS 入口迁到 127.0.0.1:6053"
+        return 1
+    fi
+    
     echo_info "配置Haproxy模式..."
     
     # 检查是否已安装
@@ -372,7 +379,7 @@ backend dns_backend
     mode tcp
     balance roundrobin
     option tcp-check
-    tcp-check send QUERY\ example.com\ IN\ A\ \r\n
+    tcp-check connect
     # 主节点
     server master $MASTER_IP:53 check inter 2s rise 2 fall 2
     # 备节点
@@ -517,6 +524,10 @@ main() {
     esac
     
     echo -e "\n${GREEN}=====================================${NC}"
+    if [[ "$FAILOVER_MODE" != "vrrp" ]]; then
+        echo_warning "注意：$FAILOVER_MODE 模式不绑定 VIP，仅配置服务与负载均衡；VIP 需由外部负载均衡提供"
+    fi
+    
     echo -e "${GREEN}🎉 Keepalived配置完成！${NC}"
     echo -e "${BLUE}=====================================${NC}"
     echo -e "${YELLOW}配置信息：${NC}"

@@ -249,7 +249,7 @@ dns:
   ratelimit: 0
   refuse_any: true
   upstream_dns:
-    - 127.0.0.1:6053
+    - 127.0.0.1:53
   upstream_dns_file: ""
   bootstrap_dns:
     - 114.114.114.114
