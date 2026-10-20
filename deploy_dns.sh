@@ -226,9 +226,11 @@ install_dns() {
     
     echo_info "在$node_type节点（$ip）安装DNS服务..."
     
-    local output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && chmod +x *.sh && ./install_dns.sh --role $role" "$node_type")
+    local output rc
+    output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && chmod +x *.sh && ./install_dns.sh --role $role" "$node_type")
+    rc=$?
     
-    if [[ $? -ne 0 ]]; then
+    if [[ $rc -ne 0 ]]; then
         echo_error "$node_type节点（$ip）DNS服务安装失败：$output"
     fi
     
@@ -244,9 +246,11 @@ config_failover() {
     
     echo_info "在$node_type节点（$ip）配置容灾服务..."
     
-    local output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && ./keepalived_config.sh --role $role --vip $VIP --interface $INTERFACE --master-ip $MASTER_IP --slave-ip $SLAVE_IP" "$node_type")
+    local output rc
+    output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && ./keepalived_config.sh --role $role --vip $VIP --interface $INTERFACE --master-ip $MASTER_IP --slave-ip $SLAVE_IP" "$node_type")
+    rc=$?
     
-    if [[ $? -ne 0 ]]; then
+    if [[ $rc -ne 0 ]]; then
         echo_error "$node_type节点（$ip）容灾服务配置失败：$output"
     fi
     
@@ -262,9 +266,11 @@ config_sync() {
     
     echo_info "在$node_type节点（$ip）配置同步服务..."
     
-    local output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && ./sync_config.sh --role $role --master-ip $MASTER_IP --slave-ip $SLAVE_IP" "$node_type")
+    local output rc
+    output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && ./sync_config.sh --role $role --master-ip $MASTER_IP --slave-ip $SLAVE_IP" "$node_type")
+    rc=$?
     
-    if [[ $? -ne 0 ]]; then
+    if [[ $rc -ne 0 ]]; then
         echo_error "$node_type节点（$ip）同步服务配置失败：$output"
     fi
     
@@ -316,17 +322,21 @@ main() {
     
     # 验证部署结果
     echo_info "正在验证部署结果..."
-    local verify_output=$(remote_exec "$MASTER_IP" "$MASTER_PWD" "cd /opt/dnsha && ./verify_deploy.sh --vip ${VIP%%/*} --role master" "主")
+    local verify_output rc
+    verify_output=$(remote_exec "$MASTER_IP" "$MASTER_PWD" "cd /opt/dnsha && ./verify_deploy.sh --vip ${VIP%%/*} --role master" "主")
+    rc=$?
     
-    if [[ $? -eq 0 ]]; then
+    if [[ $rc -eq 0 ]]; then
         echo_success "主节点部署验证通过"
     else
         echo_warning "主节点部署验证失败：$verify_output"
     fi
     
-    local verify_output_slave=$(remote_exec "$SLAVE_IP" "$SLAVE_PWD" "cd /opt/dnsha && ./verify_deploy.sh --vip ${VIP%%/*} --role slave" "备")
+    local verify_output_slave rc
+    verify_output_slave=$(remote_exec "$SLAVE_IP" "$SLAVE_PWD" "cd /opt/dnsha && ./verify_deploy.sh --vip ${VIP%%/*} --role slave" "备")
+    rc=$?
     
-    if [[ $? -eq 0 ]]; then
+    if [[ $rc -eq 0 ]]; then
         echo_success "备节点部署验证通过"
     else
         echo_warning "备节点部署验证失败：$verify_output_slave"
