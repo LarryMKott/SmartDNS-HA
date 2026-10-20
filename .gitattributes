@@ -1,0 +1,7 @@
+# 统一换行：仓库内脚本按 LF 存储，并强制 Windows 检出也是 LF。
+# 否则本地 shellcheck 会对每行报 SC1017（Literal carriage return），把真正的告警埋掉。
+* text=auto
+
+*.sh  text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
