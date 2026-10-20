@@ -58,6 +58,14 @@ else
     bad "未能解析优先级/权重"
 fi
 
+echo "== 5b. keepalived state 必须是 MASTER/BACKUP =="
+if grep -q 'state \${ROLE^^}' keepalived_config.sh; then
+    bad "state 仍用 \${ROLE^^} 拼接（备节点会写成 SLAVE）"
+else
+    ok "state 走 MASTER/BACKUP 映射"
+fi
+if grep -q 'state \$VRRP_STATE' keepalived_config.sh; then ok "config 使用 VRRP_STATE"; else bad "config 未使用 VRRP_STATE"; fi
+
 echo "== 6. DNS 链路端口自洽（#8）=="
 adguard_up=$(grep -o '127\.0\.0\.1:[0-9]*' install_dns.sh | head -1 | cut -d: -f2)
 smartdns_bind=$(grep -o 'bind \[::\]:[0-9]*' install_dns.sh | head -1 | grep -o '[0-9]*$')

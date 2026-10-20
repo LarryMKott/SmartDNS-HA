@@ -144,6 +144,14 @@ validate_params() {
         PRIORITY=${PRIORITY:-90}
     fi
     
+    # keepalived 的 state 只认 MASTER / BACKUP / FAULT。
+    # 直接用 ${ROLE^^} 会给备节点写出 state SLAVE，keepalived -t 直接判非法。
+    if [[ "$ROLE" == "master" ]]; then
+        VRRP_STATE="MASTER"
+    else
+        VRRP_STATE="BACKUP"
+    fi
+    
     echo_info "Keepalived配置参数："
     echo_info "  角色: $ROLE"
     echo_info "  VIP: $VIP"
@@ -211,7 +219,7 @@ vrrp_script check_dns_service {
 
 # VRRP实例配置
 vrrp_instance VI_1 {
-    state ${ROLE^^}
+    state $VRRP_STATE
     interface $INTERFACE
     virtual_router_id 51
     priority $PRIORITY
