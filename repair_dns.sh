@@ -114,8 +114,14 @@ parse_args() {
 
 # 验证参数
 validate_params() {
-    [[ -z "$MASTER_IP" ]] && echo_error "必须指定主节点IP（--master-ip）"
-    [[ -z "$SLAVE_IP" ]] && echo_error "必须指定备节点IP（--slave-ip）"
+    if [[ -z "$MASTER_IP" ]]; then
+        echo_error "必须指定主节点IP（--master-ip）"
+        exit 1
+    fi
+    if [[ -z "$SLAVE_IP" ]]; then
+        echo_error "必须指定备节点IP（--slave-ip）"
+        exit 1
+    fi
     
     # 默认全量修复
     if [[ -z "$FIX_DNS" && -z "$FIX_FAILOVER" && -z "$FIX_SYNC" && -z "$ROLLBACK" ]]; then
@@ -246,8 +252,18 @@ rollback_node_config() {
     
     echo_info "回滚$node_type节点（$ip）配置到默认版本..."
     
-    # 备份当前配置
-    remote_exec "$ip" "mkdir -p /tmp/dnsha_backup/$(date +%Y%m%d_%H%M%S)" "$node_type"
+    # 备份当前配置：必须留下现场，否则回滚没有退路
+    local backup_dir="/tmp/dnsha_backup/$(date +%Y%m%d_%H%M%S)"
+    if ! remote_exec "$ip" "mkdir -p $backup_dir && cp -f /etc/smartdns/smartdns.conf $backup_dir/ 2>/dev/null; cp -f /opt/AdGuardHome/conf/AdGuardHome.yaml $backup_dir/ 2>/dev/null; cp -f /etc/keepalived/keepalived.conf $backup_dir/ 2>/dev/null; ls -1 $backup_dir" "$node_type"; then
+        echo_error "$node_type节点（$ip）备份当前配置失败，已中止回滚"
+        return 1
+    fi
+    
+    # 回滚前确认默认配置齐全，缺任一即拒绝，不制造假成功
+    if ! remote_exec "$ip" "test -f /opt/dnsha/smartdns_default.conf && test -f /opt/dnsha/adguard_default.yaml && test -f /opt/dnsha/keepalived_default.conf" "$node_type" >/dev/null 2>&1; then
+        echo_error "$node_type节点（$ip）缺少 /opt/dnsha 默认配置，无法回滚"
+        return 1
+    fi
     
     # 回滚SmartDNS配置
     remote_exec "$ip" "cp -f /opt/dnsha/smartdns_default.conf /etc/smartdns/smartdns.conf" "$node_type"
@@ -330,15 +346,28 @@ repair_slave() {
 verify_repair() {
     echo_info "验证修复结果..."
     
-    # 检查主节点状态
-    echo_info "检查主节点（$MASTER_IP）服务状态..."
-    local master_services=$(remote_exec "$MASTER_IP" "systemctl is-active smartdns adguardhome" "主节点")
+    local failed=0
+    for node in "主节点:$MASTER_IP" "备节点:$SLAVE_IP"; do
+        local node_type="${node%%:*}"
+        local ip="${node#*:}"
+        echo_info "检查$node_type（$ip）服务状态..."
+        local services
+        services=$(remote_exec "$ip" "systemctl is-active smartdns adguardhome 2>/dev/null" "$node_type")
+        local line
+        while read -r line; do
+            [[ -z "$line" ]] && continue
+            if [[ "$line" != "active" ]]; then
+                echo_warning "$node_type 服务未正常运行：$line"
+                failed=$((failed + 1))
+            fi
+        done <<< "$services"
+    done
     
-    # 检查备节点状态
-    echo_info "检查备节点（$SLAVE_IP）服务状态..."
-    local slave_services=$(remote_exec "$SLAVE_IP" "systemctl is-active smartdns adguardhome" "备节点")
-    
-    echo_success "修复验证完成"
+    if [[ $failed -gt 0 ]]; then
+        echo_error "修复验证失败：$failed 个服务未运行"
+        return 1
+    fi
+    echo_success "修复验证通过"
 }
 
 # 主修复流程
@@ -360,7 +389,7 @@ main() {
     repair_slave
     
     # 验证修复结果
-    verify_repair
+    verify_repair || exit 1
     
     echo -e "\n${GREEN}=====================================${NC}"
     echo -e "${GREEN}🎉 故障修复完成！${NC}"
