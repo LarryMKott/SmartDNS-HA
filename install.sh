@@ -401,7 +401,7 @@ install_dnsha() {
     apt-get install -y --no-install-recommends \
         curl wget git build-essential libssl-dev \
         inotify-tools rsync keepalived haproxy \
-        procps iproute2 iptables-persistent \
+        procps iproute2 iptables-persistent dnsutils net-tools sshpass \
         >/dev/null 2>&1 || echo_error "安装依赖失败"
     
     # 克隆仓库

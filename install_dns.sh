@@ -96,7 +96,7 @@ sys_deps_install() {
         curl wget git \
         build-essential libssl-dev \
         inotify-tools rsync \
-        procps iproute2 \
+        procps iproute2 dnsutils net-tools sshpass \
         iptables-persistent \
         >/dev/null 2>&1 || echo_error "安装系统依赖失败"
     
