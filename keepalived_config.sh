@@ -125,6 +125,9 @@ validate_params() {
     # 设置默认值
     FAILOVER_MODE=${FAILOVER_MODE:-"vrrp"}
     
+    # VRRP 认证口令：keepalived 只取前 8 位，且两端必须一致
+    VRRP_AUTH_PASS=${VRRP_AUTH_PASS:-"dnsha123"}
+    
     # 设置优先级
     # 不变量：主节点故障后 100 + (-20) = 80，必须小于备节点 90；
     # 若权重绝对值 <= 主备优先级差，故障后双方平局，由 IP 大小决定谁当 master，故障就不切换了。
@@ -204,7 +207,7 @@ vrrp_instance VI_1 {
     advert_int 1
     authentication {
         auth_type PASS
-        auth_pass dnsha123
+        auth_pass ${VRRP_AUTH_PASS}
     }
     virtual_ipaddress {
         $VIP
@@ -313,6 +316,8 @@ EOF
 
 # 配置Haproxy模式（负载均衡）
 config_haproxy() {
+    # 统计页口令随机生成，且只监听回环
+    HAPROXY_STATS_PASS="${HAPROXY_STATS_PASS:-$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 12)}"
     # haproxy 需要独占 :53，与本机 smartdns/AdGuard 冲突时必须显式拒绝，
     # 否则 haproxy 起不来但脚本仍会打印「配置完成」。
     if command -v ss >/dev/null 2>&1 && ss -tln 2>/dev/null | grep -qE ':(53)[[:space:]]'; then
@@ -387,10 +392,10 @@ backend dns_backend
 
 # Web管理界面
 listen stats
-    bind *:8081
+    bind 127.0.0.1:8081
     stats enable
     stats uri /haproxy-stats
-    stats auth admin:admin123456
+    stats auth admin:${HAPROXY_STATS_PASS}
 EOF
     
     # 重启Haproxy服务
@@ -538,4 +543,10 @@ main() {
 }
 
 # 脚本入口
+# 需要 root 权限运行
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+    echo "错误：本脚本需要 root 权限运行" >&2
+    exit 1
+fi
+
 main "$@"

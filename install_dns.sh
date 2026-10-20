@@ -209,8 +209,22 @@ install_adguard() {
         return 0
     fi
     
+    # 按架构选择安装包（原来硬编码 amd64，ARM 机器必装错）
+    local adguard_arch
+    case "$(uname -m)" in
+        x86_64|amd64)  adguard_arch="amd64" ;;
+        aarch64|arm64) adguard_arch="arm64" ;;
+        armv7l|armv7)  adguard_arch="armv7" ;;
+        armv6l|armv6)  adguard_arch="armv6" ;;
+        *) echo_error "不支持的 CPU 架构：$(uname -m)" ;;
+    esac
+    
     # 下载AdGuard Home
-    wget -qO- https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_amd64.tar.gz | tar xvz -C /tmp/ >/dev/null 2>&1 || echo_error "下载AdGuard Home失败"
+    local adguard_url="https://github.com/AdguardTeam/AdGuardHome/releases/latest/download/AdGuardHome_linux_${adguard_arch}.tar.gz"
+    wget -qO- "$adguard_url" | tar xvz -C /tmp/ >/dev/null 2>&1 || echo_error "下载AdGuard Home失败：$adguard_url"
+    if [[ ! -f /tmp/AdGuardHome/AdGuardHome ]]; then
+        echo_error "AdGuard Home 解压后未找到可执行文件（架构：$adguard_arch）"
+    fi
     
     # 安装AdGuard Home
     mkdir -p /opt/AdGuardHome
@@ -226,16 +240,19 @@ install_adguard() {
 config_adguard() {
     echo_info "配置AdGuard Home..."
     
+    # 管理口令随机生成；不再用弱口令 admin123456
+    ADGUARD_ADMIN_PASS="${ADGUARD_ADMIN_PASS:-$(tr -dc 'A-Za-z0-9' </dev/urandom | head -c 16)}"
+    
     # 创建数据目录
     mkdir -p /opt/AdGuardHome/conf /opt/AdGuardHome/data
     
     # 主配置文件
-    cat > /opt/AdGuardHome/conf/AdGuardHome.yaml << 'EOF'
+    cat > /opt/AdGuardHome/conf/AdGuardHome.yaml << EOF
 bind_host: 0.0.0.0
 bind_port: 8080
 
 auth_name: admin
-auth_pass: "admin123456"
+auth_pass: "${ADGUARD_ADMIN_PASS}"
 
 language: zh-cn
 
@@ -394,10 +411,11 @@ EOF
 sys_firewall_config() {
     echo_info "配置防火墙规则..."
     
-    # 开放必要端口
-    iptables -A INPUT -p tcp --dport 53 -j ACCEPT 2>/dev/null
-    iptables -A INPUT -p udp --dport 53 -j ACCEPT 2>/dev/null
-    iptables -A INPUT -p tcp --dport 8080 -j ACCEPT 2>/dev/null
+    # 开放必要端口：先 -C 检查，避免每次执行重复追加规则
+    local rule
+    for rule in "-p tcp --dport 53" "-p udp --dport 53" "-p tcp --dport 8080"; do
+        iptables -C INPUT $rule -j ACCEPT 2>/dev/null || iptables -A INPUT $rule -j ACCEPT 2>/dev/null
+    done
     
     # 保存防火墙规则
     netfilter-persistent save >/dev/null 2>&1
@@ -477,9 +495,15 @@ main() {
     echo -e "  AdGuard Home: 已安装并启动"
     echo -e "  Web管理界面: http://$(hostname -I | awk '{print $1}'):8080"
     echo -e "  管理账号: admin"
-    echo -e "  管理密码: admin123456"
+    echo -e "  管理密码: $ADGUARD_ADMIN_PASS"
     echo -e "${BLUE}=====================================${NC}"
 }
 
 # 脚本入口
+# 需要 root 权限运行
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+    echo "错误：本脚本需要 root 权限运行" >&2
+    exit 1
+fi
+
 main "$@"

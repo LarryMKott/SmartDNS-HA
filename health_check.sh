@@ -30,6 +30,7 @@ echo_success() {
 
 echo_error() {
     log "${RED}ERROR${NC}" "$1"
+    exit 1
 }
 
 echo_warning() {
@@ -193,7 +194,7 @@ check_vip() {
     local node_type=$2
     
     echo -n "  VIP绑定: "
-    local vip_status=$(remote_exec "$ip" "ip addr | grep -q '$VIP' && echo 'bound' || echo 'unbound'" "$node_type")
+    local vip_status=$(remote_exec "$ip" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "$node_type")
     if [[ "$vip_status" == "bound" ]]; then
         echo -e "${GREEN}✓ 已绑定${NC}"
         return 0
@@ -295,7 +296,8 @@ check_sync_status() {
     
     # 检查主节点到备节点的同步是否正常
     echo -n "  主备同步: "
-    local sync_test=$(remote_exec "$MASTER_IP" "ssh -o StrictHostKeyChecking=no $SLAVE_IP 'echo 'sync_test'' >/dev/null 2>&1 && echo 'ok' || echo 'fail'" "主节点")
+    local sync_test
+    sync_test=$(remote_exec "$MASTER_IP" "ssh -o BatchMode=yes -o StrictHostKeyChecking=no -o ConnectTimeout=5 $SLAVE_IP 'echo sync_test' >/dev/null 2>&1 && echo ok || echo fail" "主节点")
     if [[ "$sync_test" == "ok" ]]; then
         echo -e "${GREEN}✓ 正常${NC}"
         return 0
@@ -327,8 +329,8 @@ show_overview() {
     
     # 显示主备节点VIP状态
     echo -n "  VIP状态: "
-    local master_vip=$(remote_exec "$MASTER_IP" "ip addr | grep -q '$VIP' && echo 'bound' || echo 'unbound'" "主节点")
-    local slave_vip=$(remote_exec "$SLAVE_IP" "ip addr | grep -q '$VIP' && echo 'bound' || echo 'unbound'" "备节点")
+    local master_vip=$(remote_exec "$MASTER_IP" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "主节点")
+    local slave_vip=$(remote_exec "$SLAVE_IP" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "备节点")
     
     if [[ "$master_vip" == "bound" && "$slave_vip" == "unbound" ]]; then
         echo -e "${GREEN}✓ 主节点活跃${NC}"
@@ -377,6 +379,9 @@ run_check() {
     
     # 显示系统概览
     show_overview "$master_error" "$slave_error" "$sync_error"
+    
+    # 本函数自己的汇总（show_overview 里的 total_errors 是它自己的局部变量）
+    local total_errors=$((master_error + slave_error + sync_error))
     
     # 记录日志
     local timestamp=$(date +"%Y-%m-%d %H:%M:%S")

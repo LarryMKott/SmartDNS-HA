@@ -401,4 +401,10 @@ main() {
 }
 
 # 脚本入口
+# 需要 root 权限运行
+if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
+    echo "错误：本脚本需要 root 权限运行" >&2
+    exit 1
+fi
+
 main "$@"

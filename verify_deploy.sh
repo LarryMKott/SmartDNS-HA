@@ -100,6 +100,12 @@ validate_params() {
     # 设置默认值
     FAILOVER_MODE=${FAILOVER_MODE:-"vrrp"}
     
+    # 模式必须是已知取值，否则下面的检查会全部「跳过」并通过
+    case "$FAILOVER_MODE" in
+        vrrp|haproxy|consul) ;;
+        *) echo_error "容灾模式必须是 vrrp、haproxy 或 consul（当前：$FAILOVER_MODE）"; exit 1 ;;
+    esac
+    
     echo_info "验证参数："
     echo_info "  VIP: $VIP"
     echo_info "  角色: $ROLE"
@@ -138,7 +144,8 @@ test_adguard() {
 test_vip() {
     echo -n "✓ 检查VIP绑定: "
     
-    local vip_found=$(ip addr | grep -q "$VIP" && echo "yes" || echo "no")
+    local vip_found
+    vip_found=$(ip -o addr show | awk '{print $4}' | cut -d/ -f1 | grep -qx "$VIP" && echo "yes" || echo "no")
     
     if [[ "$ROLE" == "master" ]]; then
         # 主节点应绑定VIP

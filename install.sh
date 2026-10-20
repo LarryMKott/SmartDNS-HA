@@ -337,11 +337,12 @@ detect_isp() {
     echo_info "检测当地运营商..."
     
     # 使用ipinfo.io API检测运营商
-    local isp=$(curl -s ipinfo.io/org | cut -d ' ' -f 2- 2>/dev/null)
+    local isp
+    isp=$(curl -sf --connect-timeout 3 --max-time 5 ipinfo.io/org 2>/dev/null | cut -d ' ' -f 2-)
     
     if [[ -z "$isp" ]]; then
         # 使用备用API
-        isp=$(curl -s api.myip.com | grep -oP '(?<=isp":").*?(?=")' 2>/dev/null || echo "Unknown")
+        isp=$(curl -sf --connect-timeout 3 --max-time 5 api.myip.com 2>/dev/null | grep -oP '(?<=isp":").*?(?=")' || echo "Unknown")
     fi
     
     echo_success "检测到运营商：$isp"
@@ -514,7 +515,8 @@ auth_cloudflare_ddns() {
     echo_info "使用Cloudflare DDNS更新IPv6记录：$record_name -> $ipv6"
     
     # 获取现有记录
-    local record=$(curl -s -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?name=$record_name&type=AAAA" \
+    local record
+    record=$(curl -sSf --max-time 10 -X GET "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records?name=$record_name&type=AAAA" \
         -H "Authorization: Bearer $api_token" \
         -H "Content-Type: application/json")
     
@@ -522,13 +524,13 @@ auth_cloudflare_ddns() {
     
     if [[ -n "$record_id" ]]; then
         # 更新记录
-        curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
+        curl -sSf --max-time 10 -X PUT "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records/$record_id" \
             -H "Authorization: Bearer $api_token" \
             -H "Content-Type: application/json" \
             -d "{\"type\":\"AAAA\",\"name\":\"$record_name\",\"content\":\"$ipv6\",\"ttl\":120,\"proxied\":false}" >/dev/null 2>&1
     else
         # 创建记录
-        curl -s -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
+        curl -sSf --max-time 10 -X POST "https://api.cloudflare.com/client/v4/zones/$zone_id/dns_records" \
             -H "Authorization: Bearer $api_token" \
             -H "Content-Type: application/json" \
             -d "{\"type\":\"AAAA\",\"name\":\"$record_name\",\"content\":\"$ipv6\",\"ttl\":120,\"proxied\":false}" >/dev/null 2>&1
@@ -639,7 +641,7 @@ update_cloudflare_record() {
     local record_id=\$1
     local ipv6=\$2
     
-    curl -s -X PUT "https://api.cloudflare.com/client/v4/zones/\${CLOUDFLARE_ZONE_ID}/dns_records/\${record_id}" \
+    curl -sSf --max-time 10 -X PUT "https://api.cloudflare.com/client/v4/zones/\${CLOUDFLARE_ZONE_ID}/dns_records/\${record_id}" \
         -H "Authorization: Bearer \${CLOUDFLARE_TOKEN}" \
         -H "Content-Type: application/json" \
         -d "{\"type\":\"AAAA\",\"name\":\"\${CLOUDFLARE_RECORD_NAME}\",\"content\":\"\${ipv6}\",\"ttl\":120,\"proxied\":false}" >/dev/null 2>&1
@@ -651,7 +653,7 @@ update_cloudflare_record() {
 create_cloudflare_record() {
     local ipv6=\$1
     
-    curl -s -X POST "https://api.cloudflare.com/client/v4/zones/\${CLOUDFLARE_ZONE_ID}/dns_records" \
+    curl -sSf --max-time 10 -X POST "https://api.cloudflare.com/client/v4/zones/\${CLOUDFLARE_ZONE_ID}/dns_records" \
         -H "Authorization: Bearer \${CLOUDFLARE_TOKEN}" \
         -H "Content-Type: application/json" \
         -d "{\"type\":\"AAAA\",\"name\":\"\${CLOUDFLARE_RECORD_NAME}\",\"content\":\"\${ipv6}\",\"ttl\":120,\"proxied\":false}" >/dev/null 2>&1
@@ -720,6 +722,7 @@ Description=Cloudflare DDNS Update Timer
 [Timer]
 OnBootSec=5min
 OnUnitActiveSec=1h
+Persistent=true
 
 [Install]
 WantedBy=timers.target
