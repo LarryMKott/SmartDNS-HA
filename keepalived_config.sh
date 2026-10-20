@@ -184,10 +184,11 @@ global_defs {
     smtp_connect_timeout 30
     router_id DNSHA_${ROLE^^}
     vrrp_skip_check_adv_addr
-    # 注意：vrrp_strict 会禁止 VRRP 认证，和下面的 auth_pass 冲突，
-    # keepalived -t 会直接报错。二者只能留一个，这里保留认证。
-    vrrp_garp_interval 0
-    vrrp_gna_interval 0
+    # 注意：vrrp_strict 会禁止 VRRP 认证，和下面的 auth_pass 冲突，二者只能留一个。
+    # vrrp_garp_interval / vrrp_gna_interval 不能写 0：keepalived 2.2.x 会判
+    # "number '0' outside range" 并让 keepalived -t 失败，这里直接省略用默认值。
+    # 执行 vrrp_script 需要显式开启 script_security，否则报 SECURITY VIOLATION。
+    script_security
 }
 
 # DNS服务健康检查脚本
@@ -394,6 +395,7 @@ backend dns_backend
 
 # Web管理界面
 listen stats
+    mode http
     bind 127.0.0.1:8081
     stats enable
     stats uri /haproxy-stats

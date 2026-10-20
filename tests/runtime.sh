@@ -64,8 +64,13 @@ else
     bad "netstat 看不到 :53"
 fi
 
+# keepalived 不允许在 lo 上跑 VRRP，取一个真实网卡（容器里通常是 eth0）
+IFACE=$(ip -o link show | awk -F': ' '$2 != "lo" {print $2; exit}' | sed 's/@.*//')
+IFACE=${IFACE:-eth0}
+ok "测试用网卡：$IFACE"
+
 echo "== 4. keepalived：生成配置 → 官方 -t 校验 → 健康检查脚本实跑 =="
-if bash keepalived_config.sh --role master --vip 127.0.0.2/32 --interface lo \
+if bash keepalived_config.sh --role master --vip 127.0.0.2/32 --interface "$IFACE" \
     --master-ip 127.0.0.1 --slave-ip 127.0.0.1 --failover-mode vrrp >/tmp/ka.log 2>&1; then
     ok "keepalived_config.sh 退出 0"
 else
@@ -88,7 +93,7 @@ else
 fi
 
 echo "== 5. haproxy 模式：:53 冲突时必须明确拒绝，空闲时配置要能过 -c =="
-hp_out=$(bash keepalived_config.sh --role master --vip 127.0.0.2/32 --interface lo \
+hp_out=$(bash keepalived_config.sh --role master --vip 127.0.0.2/32 --interface "$IFACE" \
     --master-ip 127.0.0.1 --slave-ip 127.0.0.1 --failover-mode haproxy 2>&1)
 if [[ "$hp_out" == *"需要独占 :53"* ]]; then
     ok ":53 被占用时明确报错"
@@ -99,7 +104,7 @@ if [[ -f /tmp/dnsmasq.pid ]]; then
     kill "$(cat /tmp/dnsmasq.pid)" >/dev/null 2>&1
     sleep 1
 fi
-bash keepalived_config.sh --role master --vip 127.0.0.2/32 --interface lo \
+bash keepalived_config.sh --role master --vip 127.0.0.2/32 --interface "$IFACE" \
     --master-ip 127.0.0.1 --slave-ip 127.0.0.1 --failover-mode haproxy >/tmp/hp.log 2>&1
 if [[ -f /etc/haproxy/haproxy.cfg ]] && haproxy -c -f /etc/haproxy/haproxy.cfg >/tmp/hp_c.log 2>&1; then
     ok "haproxy -c 配置校验通过（tcp-check connect 合法）"
