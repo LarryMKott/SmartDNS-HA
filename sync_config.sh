@@ -189,11 +189,17 @@ sync_dir() {
     local src=$1
     local dest=$2
     log "INFO" "同步 $src 到 $dest"
-    rsync -avz --delete "$src/" "root@$SLAVE_IP:$dest/" 2>&1 | grep -v "sending incremental file list" | grep -v "sent" | grep -v "received" | grep -v "total size"
-    if [[ $? -eq 0 ]]; then
+    # 源目录缺失或为空时拒绝同步：rdiff --delete 会把对端配置目录清空
+    if [[ ! -d "$src" ]] || [[ -z "$(ls -A "$src" 2>/dev/null)" ]]; then
+        log "ERROR" "同步源 $src 不存在或为空，已跳过（避免 --delete 清空对端）"
+        return 1
+    fi
+    # 用 rsync 自身退出码判定，输出写日志而不是喂给 grep
+    if rsync -avz --delete -e "ssh -o BatchMode=yes -o StrictHostKeyChecking=no" "$src/" "root@$SLAVE_IP:$dest/" >> "$LOG_FILE" 2>&1; then
         log "INFO" "成功同步 $src 到 $SLAVE_IP:$dest"
     else
-        log "ERROR" "同步 $src 到 $SLAVE_IP:$dest 失败"
+        log "ERROR" "同步 $src 到 $SLAVE_IP:$dest 失败（rsync 退出码 $?）"
+        return 1
     fi
 }
 
