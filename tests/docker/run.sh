@@ -59,8 +59,17 @@ else
 fi
 
 echo "== 2. 生成并启动 keepalived（VRRP 单播）=="
-dc exec -T node1 bash -c './keepalived_config.sh --role master --vip 172.28.0.100/24 --interface eth0 --master-ip 172.28.0.11 --slave-ip 172.28.0.12 --unicast --failover-mode vrrp' >/tmp/ka1.log 2>&1
-dc exec -T node2 bash -c './keepalived_config.sh --role slave --vip 172.28.0.100/24 --interface eth0 --master-ip 172.28.0.11 --slave-ip 172.28.0.12 --unicast --failover-mode vrrp' >/tmp/ka2.log 2>&1
+cfg1=$(dc exec -T node1 bash -c './keepalived_config.sh --role master --vip 172.28.0.100/24 --interface eth0 --master-ip 172.28.0.11 --slave-ip 172.28.0.12 --unicast --failover-mode vrrp' 2>&1)
+rc1=$?
+printf '%s\n' "$cfg1" | tail -15
+printf 'node1 keepalived_config 退出码=%s\n' "$rc1"
+if [[ "$rc1" == "0" ]]; then ok "node1 keepalived_config 退出 0"; else bad "node1 keepalived_config 退出 $rc1"; fi
+cfg2=$(dc exec -T node2 bash -c './keepalived_config.sh --role slave --vip 172.28.0.100/24 --interface eth0 --master-ip 172.28.0.11 --slave-ip 172.28.0.12 --unicast --failover-mode vrrp' 2>&1)
+rc2=$?
+printf '%s\n' "$cfg2" | tail -15
+printf 'node2 keepalived_config 退出码=%s\n' "$rc2"
+if [[ "$rc2" == "0" ]]; then ok "node2 keepalived_config 退出 0"; else bad "node2 keepalived_config 退出 $rc2"; fi
+dc exec -T node1 bash -c 'ls -l /etc/keepalived/ 2>&1; echo ---; sed -n "1,30p" /etc/keepalived/keepalived.conf 2>&1' || true
 if dc exec -T node1 bash -c 'grep -q unicast_peer /etc/keepalived/keepalived.conf'; then
     ok "生成的配置含 unicast_peer"
 else
@@ -106,7 +115,10 @@ else
 fi
 
 echo "== 6. 跨主机配置同步（真 rsync）=="
-dc exec -T node1 bash -c './sync_config.sh --role master --master-ip 172.28.0.11 --slave-ip 172.28.0.12' >/tmp/sync1.log 2>&1
+sync_out=$(dc exec -T node1 bash -c './sync_config.sh --role master --master-ip 172.28.0.11 --slave-ip 172.28.0.12' 2>&1)
+sync_rc=$?
+printf '%s\n' "$sync_out" | tail -15
+printf 'sync_config 退出码=%s\n' "$sync_rc"
 dc exec -T node1 bash -c 'mkdir -p /etc/smartdns && printf "docker-sync-test\n" > /etc/smartdns/docker-test.conf'
 dc exec -T node1 bash -c 'timeout 12 bash /opt/dnsha/sync_daemon.sh' >/tmp/daemon.log 2>&1
 if dc exec -T node2 bash -c 'grep -q docker-sync-test /etc/smartdns/docker-test.conf 2>/dev/null'; then
