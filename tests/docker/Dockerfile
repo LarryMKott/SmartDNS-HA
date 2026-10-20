@@ -18,5 +18,7 @@ RUN echo 'root:root' | chpasswd \
 
 WORKDIR /opt/dnsha
 COPY . /opt/dnsha
+# 仓库里脚本未必带执行位（平时都用 bash xxx.sh 调），容器内 ./xxx.sh 需要 +x
+RUN chmod +x /opt/dnsha/*.sh
 
 CMD ["sleep", "infinity"]

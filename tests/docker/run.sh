@@ -59,12 +59,12 @@ else
 fi
 
 echo "== 2. 生成并启动 keepalived（VRRP 单播）=="
-cfg1=$(dc exec -T node1 bash -c './keepalived_config.sh --role master --vip 172.28.0.100/24 --interface eth0 --master-ip 172.28.0.11 --slave-ip 172.28.0.12 --unicast --failover-mode vrrp' 2>&1)
+cfg1=$(dc exec -T node1 bash -c 'bash ./keepalived_config.sh --role master --vip 172.28.0.100/24 --interface eth0 --master-ip 172.28.0.11 --slave-ip 172.28.0.12 --unicast --failover-mode vrrp' 2>&1)
 rc1=$?
 printf '%s\n' "$cfg1" | tail -15
 printf 'node1 keepalived_config 退出码=%s\n' "$rc1"
 if [[ "$rc1" == "0" ]]; then ok "node1 keepalived_config 退出 0"; else bad "node1 keepalived_config 退出 $rc1"; fi
-cfg2=$(dc exec -T node2 bash -c './keepalived_config.sh --role slave --vip 172.28.0.100/24 --interface eth0 --master-ip 172.28.0.11 --slave-ip 172.28.0.12 --unicast --failover-mode vrrp' 2>&1)
+cfg2=$(dc exec -T node2 bash -c 'bash ./keepalived_config.sh --role slave --vip 172.28.0.100/24 --interface eth0 --master-ip 172.28.0.11 --slave-ip 172.28.0.12 --unicast --failover-mode vrrp' 2>&1)
 rc2=$?
 printf '%s\n' "$cfg2" | tail -15
 printf 'node2 keepalived_config 退出码=%s\n' "$rc2"
@@ -75,10 +75,15 @@ if dc exec -T node1 bash -c 'grep -q unicast_peer /etc/keepalived/keepalived.con
 else
     bad "生成的配置缺 unicast_peer"
 fi
-if dc exec -T node1 bash -c 'keepalived -t -f /etc/keepalived/keepalived.conf'; then
-    ok "keepalived -t 通过"
+if dc exec -T node1 bash -c 'test -f /etc/keepalived/keepalived.conf'; then
+    # keepalived -t 对"文件不存在"也会返回 0，所以必须先确认文件存在再校验
+    if dc exec -T node1 bash -c 'keepalived -t -f /etc/keepalived/keepalived.conf'; then
+        ok "keepalived -t 通过（且配置文件确实存在）"
+    else
+        bad "keepalived -t 失败"
+    fi
 else
-    bad "keepalived -t 失败"
+    bad "keepalived 配置文件根本没生成"
 fi
 dc exec -T -d node1 bash -c 'keepalived -n -l -f /etc/keepalived/keepalived.conf >/tmp/ka.log 2>&1'
 dc exec -T -d node2 bash -c 'keepalived -n -l -f /etc/keepalived/keepalived.conf >/tmp/ka.log 2>&1'
@@ -115,7 +120,7 @@ else
 fi
 
 echo "== 6. 跨主机配置同步（真 rsync）=="
-sync_out=$(dc exec -T node1 bash -c './sync_config.sh --role master --master-ip 172.28.0.11 --slave-ip 172.28.0.12' 2>&1)
+sync_out=$(dc exec -T node1 bash -c 'bash ./sync_config.sh --role master --master-ip 172.28.0.11 --slave-ip 172.28.0.12' 2>&1)
 sync_rc=$?
 printf '%s\n' "$sync_out" | tail -15
 printf 'sync_config 退出码=%s\n' "$sync_rc"
