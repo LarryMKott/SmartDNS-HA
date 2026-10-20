@@ -7,7 +7,6 @@
 
 # 脚本配置
 LOG_FILE="/var/log/dnsha_repair.log"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 颜色定义
 RED="\033[31m"
@@ -20,7 +19,8 @@ NC="\033[0m"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$timestamp] [$level] $msg" | tee -a "$LOG_FILE"
 }
 
@@ -174,8 +174,10 @@ repair_node_dns() {
     fi
     
     # 检查DNS服务状态
-    local smartdns_status=$(remote_exec "$ip" "systemctl is-active smartdns" "$node_type")
-    local adguard_status=$(remote_exec "$ip" "systemctl is-active adguardhome" "$node_type")
+    local smartdns_status
+    smartdns_status=$(remote_exec "$ip" "systemctl is-active smartdns" "$node_type")
+    local adguard_status
+    adguard_status=$(remote_exec "$ip" "systemctl is-active adguardhome" "$node_type")
     
     if [[ "$smartdns_status" == "active" && "$adguard_status" == "active" ]]; then
         echo_success "$node_type节点DNS服务修复完成"
@@ -253,7 +255,8 @@ rollback_node_config() {
     echo_info "回滚$node_type节点（$ip）配置到默认版本..."
     
     # 备份当前配置：必须留下现场，否则回滚没有退路
-    local backup_dir="/tmp/dnsha_backup/$(date +%Y%m%d_%H%M%S)"
+    local backup_dir
+    backup_dir="/tmp/dnsha_backup/$(date +%Y%m%d_%H%M%S)"
     if ! remote_exec "$ip" "mkdir -p $backup_dir && cp -f /etc/smartdns/smartdns.conf $backup_dir/ 2>/dev/null; cp -f /opt/AdGuardHome/conf/AdGuardHome.yaml $backup_dir/ 2>/dev/null; cp -f /etc/keepalived/keepalived.conf $backup_dir/ 2>/dev/null; ls -1 $backup_dir" "$node_type"; then
         echo_error "$node_type节点（$ip）备份当前配置失败，已中止回滚"
         return 1

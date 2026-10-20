@@ -49,7 +49,8 @@ USE_CN_MIRROR="false"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$timestamp] [$level] $msg"
 }
 
@@ -113,7 +114,8 @@ detect_system() {
     echo_info "检测当前系统..."
     
     if [[ -f /etc/debian_version ]]; then
-        local debian_version=$(cat /etc/debian_version | cut -d '.' -f 1)
+        local debian_version
+        debian_version=$(cat /etc/debian_version | cut -d '.' -f 1)
         if [[ $debian_version -lt 13 ]]; then
             echo_error "当前系统版本太低，需要Debian 13+"
         fi
@@ -135,7 +137,8 @@ detect_interface() {
     fi
     
     # 自动检测主要网卡（默认网关所在的网卡）
-    local default_interface=$(ip route show default | awk '{print $5}' | head -1)
+    local default_interface
+    default_interface=$(ip route show default | awk '{print $5}' | head -1)
     if [[ -n "$default_interface" ]]; then
         NET_INTERFACE="$default_interface"
         echo_success "自动检测到主要网卡：$NET_INTERFACE"
@@ -162,7 +165,8 @@ set_ipv4() {
     echo_info "设置固定IPv4地址：$ipv4，网关：$gateway，网卡：$interface"
     
     # 获取当前网络配置文件
-    local netplan_files=($(ls /etc/netplan/*.yaml 2>/dev/null))
+    local netplan_files
+    mapfile -t netplan_files < <(ls /etc/netplan/*.yaml 2>/dev/null)
     local netplan_file
     
     if [[ ${#netplan_files[@]} -gt 0 ]]; then
@@ -171,7 +175,8 @@ set_ipv4() {
         echo_info "使用netplan配置文件：$netplan_file"
         
         # 备份当前配置（带时间戳，重复执行不会覆盖掉真正的原始配置）
-        local bak="${netplan_file}.bak.$(date +%Y%m%d%H%M%S)"
+        local bak
+        bak="${netplan_file}.bak.$(date +%Y%m%d%H%M%S)"
         cp "$netplan_file" "$bak" || echo_error "备份netplan配置失败：$bak"
         
         # 不覆写既有配置：写独立 drop-in 文件，由 netplan 合并（99 前缀优先级更高）
@@ -232,7 +237,8 @@ set_ipv6() {
         echo_info "设置IPv6 DHCP自动获取，网卡：$interface"
         
         # 获取当前网络配置文件
-        local netplan_files=($(ls /etc/netplan/*.yaml 2>/dev/null))
+        local netplan_files
+        mapfile -t netplan_files < <(ls /etc/netplan/*.yaml 2>/dev/null)
         local netplan_file
         
         if [[ ${#netplan_files[@]} -gt 0 ]]; then
@@ -274,7 +280,8 @@ EOF
         echo_info "设置固定IPv6地址：$ipv6，网关：$gateway，网卡：$interface"
         
         # 获取当前网络配置文件
-        local netplan_files=($(ls /etc/netplan/*.yaml 2>/dev/null))
+        local netplan_files
+        mapfile -t netplan_files < <(ls /etc/netplan/*.yaml 2>/dev/null)
         local netplan_file
         
         if [[ ${#netplan_files[@]} -gt 0 ]]; then
@@ -380,7 +387,7 @@ get_isp_dns() {
     
     # 匹配运营商
     for key in "${!isp_dns_map[@]}"; do
-        if [[ "$isp" =~ "$key" ]]; then
+        if [[ "$isp" == *"$key"* ]]; then
             echo_success "使用${key}DNS：${isp_dns_map[$key]}"
             echo "${isp_dns_map[$key]}" > /tmp/dnsha_isp_dns.txt
             return 0
@@ -451,8 +458,10 @@ interactive_ip_setup() {
         
         if [[ "$set_ipv4_flag" == "y" || "$set_ipv4_flag" == "Y" ]]; then
             # 获取当前IPv4信息
-            local current_ipv4=$(ip -o -4 addr show "$NET_INTERFACE" | awk '{print $4}' | head -1)
-            local current_gateway=$(ip route show default | grep "$NET_INTERFACE" | awk '{print $3}' | head -1)
+            local current_ipv4
+            current_ipv4=$(ip -o -4 addr show "$NET_INTERFACE" | awk '{print $4}' | head -1)
+            local current_gateway
+            current_gateway=$(ip route show default | grep "$NET_INTERFACE" | awk '{print $3}' | head -1)
             
             read -p "请输入IPv4地址（CIDR格式，如：192.168.1.100/24）[$current_ipv4]: " IPV4_ADDR
             IPV4_ADDR=${IPV4_ADDR:-$current_ipv4}
@@ -471,13 +480,15 @@ interactive_ip_setup() {
         if [[ $ipv6_mode -eq 1 ]]; then
             # 固定IPv6设置
             # 获取当前IPv6信息
-            local current_ipv6=$(ip -o -6 addr show "$NET_INTERFACE" | grep -v 'fe80::' | awk '{print $4}' | head -1)
+            local current_ipv6
+            current_ipv6=$(ip -o -6 addr show "$NET_INTERFACE" | grep -v 'fe80::' | awk '{print $4}' | head -1)
             
             read -p "请输入IPv6地址（CIDR格式，如：2001:db8::1/64）[$current_ipv6]: " IPV6_ADDR
             IPV6_ADDR=${IPV6_ADDR:-$current_ipv6}
             
             # IPv6网关通常是网络前缀+1或fffe
-            local ipv6_prefix=$(echo "$IPV6_ADDR" | cut -d ':' -f 1-5)
+            local ipv6_prefix
+            ipv6_prefix=$(echo "$IPV6_ADDR" | cut -d ':' -f 1-5)
             local default_ipv6_gateway="${ipv6_prefix}::fffe"
             read -p "请输入IPv6网关 [$default_ipv6_gateway]: " IPV6_GATEWAY
             IPV6_GATEWAY=${IPV6_GATEWAY:-$default_ipv6_gateway}
@@ -520,7 +531,8 @@ auth_cloudflare_ddns() {
         -H "Authorization: Bearer $api_token" \
         -H "Content-Type: application/json")
     
-    local record_id=$(echo "$record" | grep -oP '(?<="id":")[^"]+' | head -1)
+    local record_id
+    record_id=$(echo "$record" | grep -oP '(?<="id":")[^"]+' | head -1)
     
     if [[ -n "$record_id" ]]; then
         # 更新记录
@@ -547,10 +559,7 @@ auth_cloudflare_ddns() {
 
 # 设置IPv6 DDNS
 auth_aliyun_ddns() {
-    local access_key_id=$1
-    local access_key_secret=$2
     local domain=$3
-    local record_type=$4
     local value=$5
     local rr=$6
     
@@ -842,11 +851,13 @@ EOF
     
     # 检测运营商
     detect_isp
-    local isp=$(cat /tmp/dnsha_isp.txt)
+    local isp
+    isp=$(cat /tmp/dnsha_isp.txt)
     
     # 配置DNS
     get_isp_dns "$isp"
-    local dns_servers=$(cat /tmp/dnsha_isp_dns.txt)
+    local dns_servers
+    dns_servers=$(cat /tmp/dnsha_isp_dns.txt)
     
     # 安装DNSHA
     install_dnsha

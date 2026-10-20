@@ -7,7 +7,6 @@
 
 # 脚本配置
 LOG_FILE="/var/log/dnsha_keepalived.log"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 颜色定义
 RED="\033[31m"
@@ -20,7 +19,8 @@ NC="\033[0m"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$timestamp] [$level] $msg" | tee -a "$LOG_FILE"
 }
 
@@ -281,7 +281,8 @@ LOG_FILE="/var/log/keepalived_notify.log"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo "[$timestamp] [$level] $msg" >> "$LOG_FILE"
 }
 

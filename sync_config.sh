@@ -7,12 +7,8 @@
 
 # 脚本配置
 LOG_FILE="/var/log/dnsha_sync.log"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SYNC_SCRIPT="/opt/dnsha/sync_daemon.sh"
 SYSTEMD_SERVICE="/etc/systemd/system/dns_config_sync.service"
-
-# 监控的配置目录
-MONITOR_DIRS=("/etc/smartdns" "/opt/AdGuardHome/conf")
 
 # 颜色定义
 RED="\033[31m"
@@ -25,7 +21,8 @@ NC="\033[0m"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$timestamp] [$level] $msg" | tee -a "$LOG_FILE"
 }
 
@@ -180,7 +177,8 @@ MONITOR_DIRS=("/etc/smartdns" "/opt/AdGuardHome/conf")
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo "[$timestamp] [$level] $msg" >> "$LOG_FILE"
 }
 
@@ -290,7 +288,8 @@ EOF
 check_sync_service() {
     echo_info "检查同步服务状态..."
     
-    local status=$(systemctl is-active dns_config_sync 2>/dev/null || echo "inactive")
+    local status
+    status=$(systemctl is-active dns_config_sync 2>/dev/null || echo "inactive")
     if [[ "$status" == "active" ]]; then
         echo_success "同步服务运行正常"
         return 0

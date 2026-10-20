@@ -20,7 +20,8 @@ NC="\033[0m"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$timestamp] [$level] $msg" | tee -a "$LOG_FILE"
 }
 
@@ -146,7 +147,8 @@ check_smartdns() {
     local node_type=$2
     
     echo -n "  SmartDNS: "
-    local status=$(remote_exec "$ip" "systemctl is-active smartdns" "$node_type")
+    local status
+    status=$(remote_exec "$ip" "systemctl is-active smartdns" "$node_type")
     if [[ "$status" == "active" ]]; then
         echo -e "${GREEN}✓ 运行中${NC}"
         return 0
@@ -162,7 +164,8 @@ check_adguard() {
     local node_type=$2
     
     echo -n "  AdGuardHome: "
-    local status=$(remote_exec "$ip" "systemctl is-active adguardhome" "$node_type")
+    local status
+    status=$(remote_exec "$ip" "systemctl is-active adguardhome" "$node_type")
     if [[ "$status" == "active" ]]; then
         echo -e "${GREEN}✓ 运行中${NC}"
         return 0
@@ -178,7 +181,8 @@ check_keepalived() {
     local node_type=$2
     
     echo -n "  Keepalived: "
-    local status=$(remote_exec "$ip" "systemctl is-active keepalived 2>/dev/null || echo 'inactive'" "$node_type")
+    local status
+    status=$(remote_exec "$ip" "systemctl is-active keepalived 2>/dev/null || echo 'inactive'" "$node_type")
     if [[ "$status" == "active" ]]; then
         echo -e "${GREEN}✓ 运行中${NC}"
         return 0
@@ -194,7 +198,8 @@ check_vip() {
     local node_type=$2
     
     echo -n "  VIP绑定: "
-    local vip_status=$(remote_exec "$ip" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "$node_type")
+    local vip_status
+    vip_status=$(remote_exec "$ip" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "$node_type")
     if [[ "$vip_status" == "bound" ]]; then
         echo -e "${GREEN}✓ 已绑定${NC}"
         return 0
@@ -210,7 +215,8 @@ check_dns_resolve() {
     local node_type=$2
     
     echo -n "  DNS解析: "
-    local resolve_result=$(remote_exec "$ip" "dig @127.0.0.1 www.baidu.com +short +timeout=2 2>/dev/null | head -1" "$node_type")
+    local resolve_result
+    resolve_result=$(remote_exec "$ip" "dig @127.0.0.1 www.baidu.com +short +timeout=2 2>/dev/null | head -1" "$node_type")
     if [[ -n "$resolve_result" ]]; then
         echo -e "${GREEN}✓ 正常${NC}"
         return 0
@@ -226,7 +232,8 @@ check_sync_service() {
     local node_type=$2
     
     echo -n "  同步服务: "
-    local sync_status=$(remote_exec "$ip" "systemctl is-active dns_config_sync 2>/dev/null || echo 'inactive'" "$node_type")
+    local sync_status
+    sync_status=$(remote_exec "$ip" "systemctl is-active dns_config_sync 2>/dev/null || echo 'inactive'" "$node_type")
     if [[ "$sync_status" == "active" ]]; then
         echo -e "${GREEN}✓ 运行中${NC}"
         return 0
@@ -242,7 +249,8 @@ check_disk_space() {
     local node_type=$2
     
     echo -n "  磁盘空间: "
-    local disk_usage=$(remote_exec "$ip" "df -h / | tail -1 | awk '{print $5}' | sed 's/%//'" "$node_type")
+    local disk_usage
+    disk_usage=$(remote_exec "$ip" "df -h / | tail -1 | awk '{print $5}' | sed 's/%//'" "$node_type")
     if [[ "$disk_usage" -lt 80 ]]; then
         echo -e "${GREEN}✓ $disk_usage%${NC}"
         return 0
@@ -261,7 +269,7 @@ check_node() {
     local node_type=$2
     local role=$3
     
-    echo -e "\n${BLUE}[$node_type节点: $ip]${NC}"
+    echo -e "\n${BLUE}[$node_type节点($role): $ip]${NC}"
     echo -e "${BLUE}-------------------------------------${NC}"
     
     local error_count=0
@@ -318,7 +326,8 @@ show_overview() {
     echo -e "${BLUE}=====================================${NC}"
     
     # 计算整体状态
-    local total_errors=$((master_error + slave_error + sync_error))
+    local total_errors
+    total_errors=$((master_error + slave_error + sync_error))
     if [[ $total_errors -eq 0 ]]; then
         echo -e "  整体状态: ${GREEN}✓ 健康${NC}"
     elif [[ $total_errors -lt 3 ]]; then
@@ -329,8 +338,10 @@ show_overview() {
     
     # 显示主备节点VIP状态
     echo -n "  VIP状态: "
-    local master_vip=$(remote_exec "$MASTER_IP" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "主节点")
-    local slave_vip=$(remote_exec "$SLAVE_IP" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "备节点")
+    local master_vip
+    master_vip=$(remote_exec "$MASTER_IP" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "主节点")
+    local slave_vip
+    slave_vip=$(remote_exec "$SLAVE_IP" "ip -o addr show | awk '{print \\$4}' | cut -d/ -f1 | grep -qx '$VIP' && echo 'bound' || echo 'unbound'" "备节点")
     
     if [[ "$master_vip" == "bound" && "$slave_vip" == "unbound" ]]; then
         echo -e "${GREEN}✓ 主节点活跃${NC}"
@@ -381,13 +392,18 @@ run_check() {
     show_overview "$master_error" "$slave_error" "$sync_error"
     
     # 本函数自己的汇总（show_overview 里的 total_errors 是它自己的局部变量）
-    local total_errors=$((master_error + slave_error + sync_error))
+    local total_errors
+    total_errors=$((master_error + slave_error + sync_error))
     
     # 记录日志
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
-    local master_status=$([[ $master_error -eq 0 ]] && echo "normal" || echo "abnormal")
-    local slave_status=$([[ $slave_error -eq 0 ]] && echo "normal" || echo "abnormal")
-    local sync_status=$([[ $sync_error -eq 0 ]] && echo "normal" || echo "abnormal")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local master_status
+    master_status=$([[ $master_error -eq 0 ]] && echo "normal" || echo "abnormal")
+    local slave_status
+    slave_status=$([[ $slave_error -eq 0 ]] && echo "normal" || echo "abnormal")
+    local sync_status
+    sync_status=$([[ $sync_error -eq 0 ]] && echo "normal" || echo "abnormal")
     
     log "INFO" "Health check completed - master:$master_status slave:$slave_status sync:$sync_status errors:$total_errors"
 }
@@ -406,7 +422,12 @@ main() {
         run_check
     else
         # 循环检查
-        trap "echo -e '\n\n${YELLOW}检测到中断信号，退出健康检查...${NC}'; exit 0" SIGINT SIGTERM
+        # 中断处理放进函数：trap 字符串用双引号会在安装时提前展开（SC2064）
+        on_interrupt() {
+            echo -e "\n\n${YELLOW}检测到中断信号，退出健康检查...${NC}"
+            exit 0
+        }
+        trap on_interrupt SIGINT SIGTERM
         
         while true; do
             run_check

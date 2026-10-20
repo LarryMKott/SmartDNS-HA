@@ -35,7 +35,7 @@ jobs:
         run: bash tests/selftest.sh
 
   shellcheck:
-    name: shellcheck（规则级检查，当前为准入参考）
+    name: shellcheck（error + warning 双门禁）
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,17 +46,17 @@ jobs:
           sudo apt-get install -y -qq shellcheck
           shellcheck --version | head -2
 
-      - name: error 级（硬门禁）
+      - name: error 级
         run: shellcheck -x -S error *.sh tests/*.sh
 
-      - name: warning 级（仅供参考，不阻断）
-        continue-on-error: true
-        run: shellcheck -x -S warning -f gcc *.sh tests/*.sh || true
+      - name: warning 级
+        run: shellcheck -x -S warning *.sh tests/*.sh
 
-      - name: 汇总统计
+      - name: style 级统计（仅供参考，不阻断）
         if: always()
+        continue-on-error: true
         run: |
-          echo "### shellcheck 统计" >> "$GITHUB_STEP_SUMMARY"
+          echo "### shellcheck style 级统计" >> "$GITHUB_STEP_SUMMARY"
           echo '```' >> "$GITHUB_STEP_SUMMARY"
           shellcheck -x -S style -f gcc *.sh 2>/dev/null | awk -F: '{print $4}' | sort | uniq -c | sort -rn | head -15 >> "$GITHUB_STEP_SUMMARY" || true
           echo '```' >> "$GITHUB_STEP_SUMMARY"

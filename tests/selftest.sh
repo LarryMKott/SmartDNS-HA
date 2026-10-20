@@ -92,7 +92,7 @@ if awk '/^echo_error\(\)/,/^}/' health_check.sh | grep -q 'exit 1'; then
 else
     bad "health_check echo_error 不退出"
 fi
-if grep -q -A2 'local total_errors=' health_check.sh; then ok "total_errors 有定义"; else bad "total_errors 未定义"; fi
+if grep -q 'total_errors=$((master_error' health_check.sh; then ok "total_errors 有定义"; else bad "total_errors 未定义"; fi
 if grep -q "grep -qx" health_check.sh; then ok "VIP 精确匹配"; else bad "VIP 仍用正则模糊匹配"; fi
 if grep -q 'vrrp|haproxy|consul' verify_deploy.sh; then ok "FAILOVER_MODE 有取值校验"; else bad "FAILOVER_MODE 未校验"; fi
 if grep -q 'iptables -C INPUT' install_dns.sh; then ok "iptables 规则幂等"; else bad "iptables 仍重复追加"; fi

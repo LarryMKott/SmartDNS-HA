@@ -7,7 +7,6 @@
 
 # 脚本配置
 LOG_FILE="/var/log/dnsha_verify.log"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 颜色定义
 RED="\033[31m"
@@ -20,7 +19,8 @@ NC="\033[0m"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$timestamp] [$level] $msg" | tee -a "$LOG_FILE"
 }
 
@@ -243,7 +243,8 @@ test_dns_resolve() {
     echo -n "✓ 检查DNS解析功能: "
     
     # 测试本地DNS解析
-    local resolve_result=$(dig @127.0.0.1 www.baidu.com +short +timeout=2 2>/dev/null | head -1)
+    local resolve_result
+    resolve_result=$(dig @127.0.0.1 www.baidu.com +short +timeout=2 2>/dev/null | head -1)
     if [[ -n "$resolve_result" ]]; then
         echo -e "${GREEN}正常${NC}"
         return 0

@@ -7,7 +7,6 @@
 
 # 脚本配置
 LOG_FILE="/var/log/dnsha_install.log"
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # 颜色定义
 RED="\033[31m"
@@ -20,7 +19,8 @@ NC="\033[0m"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$timestamp] [$level] $msg" | tee -a "$LOG_FILE"
 }
 
@@ -118,7 +118,7 @@ install_smartdns() {
     
     # 编译安装
     cd /tmp/smartdns || echo_error "进入SmartDNS目录失败"
-    make -j$(nproc) >/dev/null 2>&1 || echo_error "编译SmartDNS失败"
+    make -j"$(nproc)" >/dev/null 2>&1 || echo_error "编译SmartDNS失败"
     make install >/dev/null 2>&1 || echo_error "安装SmartDNS失败"
     
     # 清理临时文件

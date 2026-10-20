@@ -23,7 +23,8 @@ NC="\033[0m"
 log() {
     local level=$1
     local msg=$2
-    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    local timestamp
+    timestamp=$(date +"%Y-%m-%d %H:%M:%S")
     echo -e "[$timestamp] [$level] $msg" | tee -a "$LOG_FILE"
 }
 
@@ -122,6 +123,7 @@ parse_args() {
 read_config() {
     if [[ -f "$CONFIG_FILE" ]]; then
         echo_info "读取配置文件：$CONFIG_FILE"
+        # shellcheck source=/dev/null
         source "$CONFIG_FILE" 2>/dev/null || echo_error "配置文件格式错误"
         
         # 配置文件变量映射
