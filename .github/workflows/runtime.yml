@@ -1,0 +1,47 @@
+name: runtime
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  runtime:
+    name: Debian 12 运行态验证
+    runs-on: ubuntu-latest
+    container: debian:12
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 安装脚本声明的全部依赖
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
+            curl wget git ca-certificates \
+            build-essential libssl-dev \
+            inotify-tools rsync sshpass \
+            keepalived haproxy procps iproute2 iptables iptables-persistent \
+            dnsutils net-tools \
+            dnsmasq openssh-server \
+            python3
+          echo "--- 版本 ---"
+          uname -a
+          keepalived --version 2>&1 | head -1
+          haproxy -v | head -1
+
+      - name: 运行态验证
+        run: bash tests/runtime.sh
+
+      - name: 失败时打印日志
+        if: failure()
+        run: |
+          for f in /tmp/ka.log /tmp/ka_t.log /tmp/check_dns.log /tmp/hp.log /tmp/hp_c.log /tmp/vd.log /tmp/hc.log /tmp/deploy.log /var/log/dnsha_sync_daemon.log; do
+            if [ -f "$f" ]; then
+              echo "===== $f ====="
+              tail -40 "$f"
+            fi
+          done
