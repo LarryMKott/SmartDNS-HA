@@ -170,18 +170,23 @@ set_ipv4() {
         netplan_file="${netplan_files[0]}"
         echo_info "使用netplan配置文件：$netplan_file"
         
-        # 备份当前配置
-        cp "$netplan_file" "${netplan_file}.bak"
+        # 备份当前配置（带时间戳，重复执行不会覆盖掉真正的原始配置）
+        local bak="${netplan_file}.bak.$(date +%Y%m%d%H%M%S)"
+        cp "$netplan_file" "$bak" || echo_error "备份netplan配置失败：$bak"
         
-        # 生成新的netplan配置
-        cat > "$netplan_file" << EOF
+        # 不覆写既有配置：写独立 drop-in 文件，由 netplan 合并（99 前缀优先级更高）
+        local dropin="/etc/netplan/99-dnsha-${interface}.yaml"
+        cat > "$dropin" << EOF
 network:
   version: 2
   renderer: networkd
   ethernets:
     $interface:
+      dhcp4: false
       addresses: [$ipv4]
-      gateway4: $gateway
+      routes:
+        - to: default
+          via: $gateway
       nameservers:
         addresses: [114.114.114.114, 8.8.8.8]
 EOF
@@ -234,23 +239,15 @@ set_ipv6() {
             # 使用netplan配置
             netplan_file="${netplan_files[0]}"
             
-            # 检查是否已包含IPv6配置
-            if grep -q "addresses" "$netplan_file"; then
-                # 修改现有配置，启用IPv6 DHCP
-                sed -i "/addresses:/a\      dhcp6: true" "$netplan_file"
-                sed -i "/gateway6:/d" "$netplan_file" 2>/dev/null
-            else
-                # 创建新的配置
-                cat > "$netplan_file" << EOF
+            # 不覆写既有配置：写独立 drop-in，只声明 dhcp6
+            cat > "/etc/netplan/99-dnsha-ipv6-${interface}.yaml" << EOF
 network:
   version: 2
   renderer: networkd
   ethernets:
     $interface:
-      dhcp4: true
       dhcp6: true
 EOF
-            fi
             
             # 应用配置
             netplan apply >/dev/null 2>&1 || echo_error "netplan apply失败"
@@ -286,13 +283,17 @@ EOF
             
             # 检查是否已包含IPv6配置
             if grep -q "addresses" "$netplan_file" && grep -q "gateway4" "$netplan_file"; then
-                # 修改现有配置，添加IPv6
-                sed -i "/addresses:/ s/\]$/, $ipv6\]/" "$netplan_file"
-                sed -i "/gateway4:/ a\      gateway6: $gateway" "$netplan_file"
-                sed -i "/dhcp6:/d" "$netplan_file" 2>/dev/null
+                # 添加IPv6：用 | 当分隔符，避免地址里的 / 被 sed 当成分隔符
+                sed -i "/addresses:/ s|]$|, $ipv6]|" "$netplan_file"
+                if grep -qF "$ipv6" "$netplan_file"; then
+                    sed -i "/gateway4:/ a\      gateway6: $gateway" "$netplan_file"
+                    sed -i "/dhcp6:/d" "$netplan_file" 2>/dev/null
+                else
+                    echo_error "写入IPv6地址失败（$ipv6），已中止；未写 gateway6，避免产生有网关无地址的坏配置"
+                fi
             else
                 # 创建新的配置
-                cat > "$netplan_file" << EOF
+                cat > "/etc/netplan/99-dnsha-ipv6-static-${interface}.yaml" << EOF
 network:
   version: 2
   renderer: networkd
@@ -576,7 +577,8 @@ setup_ipv6_ddns() {
     fi
     
     # Cloudflare配置
-    read -p "请输入Cloudflare API Token: " CLOUDFLARE_TOKEN
+    read -rsp "请输入Cloudflare API Token（输入不回显）: " CLOUDFLARE_TOKEN
+    echo
     read -p "请输入Zone ID: " CLOUDFLARE_ZONE_ID
     read -p "请输入域名 (如: example.com): " CLOUDFLARE_DOMAIN
     read -p "请输入记录名 (如: ipv6): " CLOUDFLARE_RECORD_NAME
@@ -708,7 +710,7 @@ main() {
 main
 EOF
     
-    chmod +x /opt/dnsha/cloudflare_ddns.sh
+    chmod 700 /opt/dnsha/cloudflare_ddns.sh
     
     # 创建systemd定时器
     cat > /etc/systemd/system/cloudflare_ddns.timer << 'EOF'
@@ -829,7 +831,7 @@ EOF
     # 设置IPv6
     if [[ -n "$IPV6_ADDR" && -n "$IPV6_GATEWAY" ]]; then
         set_ipv6 "$NET_INTERFACE" "$IPV6_ADDR" "$IPV6_GATEWAY" "static"
-    elif [[ "$IPV6_MODE" == "dhcp" || -z "$IPV6_ADDR" ]]; then
+    elif [[ "$IPV6_MODE" == "dhcp" ]]; then
         set_ipv6 "$NET_INTERFACE" "" "" "dhcp"
     elif [[ -n "$IPV6_ADDR" || -n "$IPV6_GATEWAY" ]]; then
         echo_error "设置IPv6时必须同时提供IPv6地址和网关"
