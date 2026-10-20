@@ -489,10 +489,11 @@ start_keepalived_service() {
 verify_keepalived_config() {
     echo_info "验证Keepalived配置..."
     
-    # 检查配置文件语法
-    keepalived -t -f /etc/keepalived/keepalived.conf >/dev/null 2>&1
+    # 检查配置文件语法：必须把 keepalived 的原始报错打出来，否则只剩一句"语法错误"
+    local ka_check
+    ka_check=$(keepalived -t -f /etc/keepalived/keepalived.conf 2>&1)
     if [[ $? -ne 0 ]]; then
-        echo_error "Keepalived配置文件语法错误"
+        echo_error "Keepalived配置文件语法错误：${ka_check}"
     fi
     
     # 检查服务状态
