@@ -69,6 +69,10 @@ Examples:
   
   # 配置文件部署
   $0 --config dnsha.conf
+
+Environment:
+  ADGUARD_ADMIN_PASS / VRRP_AUTH_PASS / HAPROXY_STATS_PASS
+  在控制机 export 后会透传到节点上的对应脚本；不设置则使用各脚本默认/随机值。
 EOF
     exit 0
 }
@@ -135,6 +139,19 @@ read_config() {
         INTERFACE=${interface:-$INTERFACE}
         FAILOVER_MODE=${failover_mode:-$FAILOVER_MODE}
     fi
+}
+
+# 构造远程环境变量前缀（只转发显式设置过的变量，值经 %q 转义）
+ENV_PREFIX=""
+build_env_prefix() {
+    ENV_PREFIX=""
+    local name value
+    for name in ADGUARD_ADMIN_PASS VRRP_AUTH_PASS HAPROXY_STATS_PASS; do
+        value="${!name:-}"
+        [[ -z "$value" ]] && continue
+        ENV_PREFIX+="$name=$(printf '%q' "$value") "
+        echo_info "将向节点透传环境变量：$name（值不回显）"
+    done
 }
 
 # 验证参数
@@ -229,7 +246,7 @@ install_dns() {
     echo_info "在$node_type节点（$ip）安装DNS服务..."
     
     local output rc
-    output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && chmod +x *.sh && ./install_dns.sh --role $role" "$node_type")
+    output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && chmod +x *.sh && ${ENV_PREFIX}./install_dns.sh --role $role" "$node_type")
     rc=$?
     
     if [[ $rc -ne 0 ]]; then
@@ -249,7 +266,7 @@ config_failover() {
     echo_info "在$node_type节点（$ip）配置容灾服务..."
     
     local output rc
-    output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && ./keepalived_config.sh --role $role --vip $VIP --interface $INTERFACE --master-ip $MASTER_IP --slave-ip $SLAVE_IP" "$node_type")
+    output=$(remote_exec "$ip" "$pwd" "cd /opt/dnsha && ${ENV_PREFIX}./keepalived_config.sh --role $role --vip $VIP --interface $INTERFACE --master-ip $MASTER_IP --slave-ip $SLAVE_IP" "$node_type")
     rc=$?
     
     if [[ $rc -ne 0 ]]; then
@@ -295,6 +312,9 @@ main() {
     
     # 验证参数
     validate_params
+
+    # 收集需要透传到节点的环境变量
+    build_env_prefix
     
     # 测试SSH连接
     ssh_test "$MASTER_IP" "$MASTER_PWD" "主"

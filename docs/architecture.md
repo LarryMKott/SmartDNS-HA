@@ -77,6 +77,8 @@ AdGuard Home 是**旁路过滤层**，不是 `:53` 的必经之路：
 
 注意第 7 步：部署脚本把验证失败当**警告**处理，退出码仍可能是 0。判定"部署成功"必须另跑 `health_check.sh --once` 或人工核对，见 [deployment.md](deployment.md#4-部署后验收)。
 
+环境变量：控制机上 export 的 `ADGUARD_ADMIN_PASS`、`VRRP_AUTH_PASS`、`HAPROXY_STATS_PASS` 会由 `deploy_dns.sh` 透传到对应的远端脚本（值经 `printf %q` 转义）；其他变量仍需在节点上以内联形式传入。
+
 ## 配置同步链路
 
 ```
@@ -226,7 +228,6 @@ haproxy 模式需要独占 :53，但本机已有服务监听（smartdns/AdGuard�
 | L14 | 仓库没有性能基准；README 中的 QPS/切换时延是设计目标 | 不能当作实测数据对外承诺 | 用 `dnsperf` 自测，结果写入自己的容量记录 |
 | L15 | haproxy stats 口令写在配置里但不打印 | 运维需要自己读文件 | `grep 'stats auth' /etc/haproxy/haproxy.cfg` |
 | L16 | Consul 的 `bind_addr` 取 `hostname -I` 的第一个地址 | 多网卡环境可能绑错网卡 | 手工改 `/etc/consul.d/consul_server.json` 后重启 |
-| L17 | `deploy_dns.sh` 通过 SSH 执行远端脚本，**不转发**本地环境变量 | `ADGUARD_ADMIN_PASS`、`VRRP_AUTH_PASS`、`HAPROXY_STATS_PASS` 在控制机上 export 对节点无效 | 在节点上以内联形式重跑对应脚本（`ssh root@节点 'VAR=值 /opt/dnsha/xxx.sh ...'`） |
 
 ## 相关文档
 

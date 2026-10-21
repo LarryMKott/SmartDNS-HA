@@ -119,6 +119,18 @@ for f in deploy_dns.sh install_dns.sh keepalived_config.sh repair_dns.sh sync_co
     if grep -q '需要 root 权限运行' "$f"; then ok "$f 有 root 检查"; else bad "$f 缺 root 检查"; fi
 done
 
+echo "== 11. 部署透传环境变量（L17 回归）=="
+if grep -q 'ADGUARD_ADMIN_PASS' deploy_dns.sh && grep -q 'VRRP_AUTH_PASS' deploy_dns.sh; then
+    ok "deploy 透传 ADGUARD/VRRP 变量"
+else
+    bad "deploy 未透传环境变量"
+fi
+if grep -q "printf '%q'" deploy_dns.sh && grep -q 'ENV_PREFIX}./install_dns.sh' deploy_dns.sh; then
+    ok "透传值经 %q 转义并用于远端命令"
+else
+    bad "透传值未转义或未接入远端命令"
+fi
+
 echo
 echo "================ 汇总 ================"
 printf '通过 %d 项，失败 %d 项\n' "$pass" "$fail"

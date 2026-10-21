@@ -126,7 +126,7 @@ ssh root@192.168.1.101 'ADGUARD_ADMIN_PASS="<自定义密码>" /opt/dnsha/instal
 ssh root@192.168.1.102 'ADGUARD_ADMIN_PASS="<自定义密码>" /opt/dnsha/install_dns.sh --role slave'
 ```
 
-> 注意：`ADGUARD_ADMIN_PASS=xxx ssh ...` 这种写法**无效**（ssh 默认不传自定义环境变量），`deploy_dns.sh` 也不会把本地环境变量透传到节点。见 [architecture.md](architecture.md#已知限制) 的 L17。
+> 注意：`ADGUARD_ADMIN_PASS=xxx ssh ...` 这种写法**无效**（ssh 默认不传自定义环境变量），变量要写在远端命令内部；而 `deploy_dns.sh` 会主动透传控制机上 export 的 `ADGUARD_ADMIN_PASS` / `VRRP_AUTH_PASS` / `HAPROXY_STATS_PASS`，一键部署时直接 export 即可。
 
 ### 5.2 配置 keepalived
 
@@ -234,7 +234,7 @@ ssh root@<节点> '/opt/dnsha/keepalived_config.sh --role master --failover-mode
 
 ## 7. 重跑与失败恢复
 
-- **幂等性**：`deploy_dns.sh` 可重复执行，会重新装服务、重写配置、重启 keepalived/同步。AdGuard 密码每次重装都会重新生成（`deploy_dns.sh` 不透传 `ADGUARD_ADMIN_PASS`，需要固定密码时按 5.1 在节点上以远端内联环境变量重装）。
+- **幂等性**：`deploy_dns.sh` 可重复执行，会重新装服务、重写配置、重启 keepalived/同步。AdGuard 密码每次重装都会重新生成；要固定就在控制机 export `ADGUARD_ADMIN_PASS` 后重跑部署（会透传），或按 5.1 在节点上以内联环境变量重装。
 - **部署中断**：日志在 `/var/log/dnsha_deploy.log`，按"分步部署"从失败的那一步继续，不要从头盲跑。
 - **keepalived 配置报错**：`ssh root@<节点> 'keepalived -t -f /etc/keepalived/keepalived.conf'` 看原始错误。
 - **回滚**：`repair_dns.sh --rollback` 需要节点上存在三份默认配置，仓库不会生成它们。首次部署成功后请手工备份：

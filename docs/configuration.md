@@ -263,7 +263,7 @@ ssh root@<备节点> 'tail -1 /etc/smartdns/smartdns.conf'
 | `HAPROXY_STATS_PASS` | `keepalived_config.sh`（haproxy） | 随机 12 位 | haproxy stats 口令 |
 | `SYNC_INTERVAL` | `sync_config.sh` | 5 | 解析并打印，**当前不生效**（事件驱动，无轮询） |
 
-> **变量作用域**：以上变量只在**执行脚本的那个 shell**里生效。通过 `ssh root@节点 '脚本'` 调用时，变量必须写在远端命令内部（`ssh root@节点 'VAR=值 /opt/dnsha/xxx.sh ...'`），本机 `export` 不会被 ssh 转发；`deploy_dns.sh` 同样不透传（见 [architecture.md](architecture.md#已知限制) L17）。
+> **变量作用域**：变量只在**执行脚本的那个 shell**里生效。直接 `ssh root@节点 '脚本'` 时，变量必须写在远端命令内部（`ssh root@节点 'VAR=值 /opt/dnsha/xxx.sh ...'`），本机 `export` 不会被 ssh 转发；`deploy_dns.sh` 是例外——它会主动透传 `ADGUARD_ADMIN_PASS`、`VRRP_AUTH_PASS`、`HAPROXY_STATS_PASS` 三个变量。
 
 ## 9. 参数优先级
 

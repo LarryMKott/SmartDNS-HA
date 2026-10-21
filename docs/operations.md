@@ -192,8 +192,9 @@ git pull
 # 重新部署（会重装服务、重写配置、重启 keepalived/同步）
 sudo ./deploy_dns.sh --config /root/dnsha.env
 # AdGuard 密码默认会重新生成，注意记录。
-# 要固定密码：deploy 不会透传环境变量，需在每台节点上以内联形式重装：
-#   ssh root@<节点> 'ADGUARD_ADMIN_PASS="<原密码>" /opt/dnsha/install_dns.sh --role <role>'
+# 要固定密码：在控制机 export 后重跑部署（deploy 会透传到节点脚本）
+export ADGUARD_ADMIN_PASS='<原密码>'
+sudo -E ./deploy_dns.sh --config /root/dnsha.env
 ```
 
 升级注意：

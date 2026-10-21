@@ -36,15 +36,21 @@
 | Cloudflare API Token | 用户输入 | `cloudflare_ddns.sh` 明文 | 重新配置 DDNS 或直接编辑脚本 |
 | root SSH | 用户自备 | `~/.ssh/authorized_keys` | 换 key 并回收旧 key |
 
-生成时就把口令钉住（**必须写在远端命令内部**，ssh 不会转发本地环境变量）：
+生成时就把口令钉住。控制机上 export 后执行部署，`deploy_dns.sh` 会透传到节点脚本：
 
 ```bash
-# 两台节点，各自执行
-ssh root@192.168.1.101 'VRRP_AUTH_PASS="<8位随机>" /opt/dnsha/keepalived_config.sh --role master --vip <VIP/CIDR> --interface <网卡>'
-ssh root@192.168.1.101 'ADGUARD_ADMIN_PASS="<强口令>" /opt/dnsha/install_dns.sh --role master'
+export VRRP_AUTH_PASS='<8位随机>'
+export ADGUARD_ADMIN_PASS='<强口令>'
+sudo -E ./deploy_dns.sh -m <主节点IP> -s <备节点IP> -v <VIP/CIDR> -i <网卡>
 ```
 
-`deploy_dns.sh` 只负责编排，不会透传这两个变量；用一键部署时口令会按脚本默认/随机生成，部署后再按上面方式重跑对应节点脚本即可。
+也可以绕过一键部署，在节点上内联执行对应脚本（ssh 不会转发本地环境变量，变量必须写在远端命令内部）：
+
+```bash
+ssh root@<节点> 'VRRP_AUTH_PASS="<8位随机>" /opt/dnsha/keepalived_config.sh --role master --vip <VIP/CIDR> --interface <网卡>'
+```
+
+透传的值会出现在远端进程的 `ps` 参数里（执行瞬间），不要在多人共用的节点上长时间保留敏感口令。
 
 ## 4. 暴露面
 

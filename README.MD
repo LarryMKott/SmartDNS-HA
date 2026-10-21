@@ -114,6 +114,18 @@ sudo ./deploy_dns.sh \
   --interface eth0
 ```
 
+固定凭据（可选，但生产建议）：`deploy_dns.sh` 会把这三个变量透传到节点脚本。
+
+```bash
+export ADGUARD_ADMIN_PASS='<强口令>'
+export VRRP_AUTH_PASS='<8位随机>'
+sudo -E ./deploy_dns.sh \
+  --master-ip 192.168.1.101 \
+  --slave-ip 192.168.1.102 \
+  --vip 192.168.1.200/24 \
+  --interface eth0
+```
+
 密码方式（会进 shell history，生产不推荐）：
 
 ```bash
