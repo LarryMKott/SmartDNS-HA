@@ -45,6 +45,30 @@ echo_info() {
     log "${BLUE}INFO${NC}" "$1"
 }
 
+# 交互式输入：标准输入是终端时自动启用；--interactive / DNSHA_FORCE_INTERACTIVE=1 可强制
+INTERACTIVE="${INTERACTIVE:-false}"
+is_interactive() {
+    [[ "$INTERACTIVE" == "true" ]] || [[ -t 0 ]] || [[ "${DNSHA_FORCE_INTERACTIVE:-0}" == "1" ]]
+}
+
+ask_value() {
+    local var=$1 prompt=$2 default=${3:-} answer
+    if [[ -n "$default" ]]; then
+        read -r -p "$prompt [$default]: " answer || true
+        answer=${answer:-$default}
+    else
+        read -r -p "$prompt: " answer || true
+    fi
+    printf -v "$var" '%s' "$answer"
+}
+
+ask_secret() {
+    local var=$1 prompt=$2 answer
+    read -r -s -p "$prompt: " answer || true
+    echo
+    printf -v "$var" '%s' "$answer"
+}
+
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -61,6 +85,7 @@ Options:
   --interface, -i <IFACE>     网卡名称（默认：$DEFAULT_INTERFACE）
   --failover-mode, -f <MODE>  容灾模式：vrrp/haproxy/consul（默认：$DEFAULT_FAILOVER_MODE）
   --config, -c <FILE>         配置文件路径（可选，优先于命令行参数）
+  --interactive, -I                  交互式输入缺失参数
   --help, -h                  显示帮助信息
 
 Examples:
@@ -113,6 +138,10 @@ parse_args() {
                 CONFIG_FILE="$2"
                 shift 2
                 ;;
+            --interactive|-I)
+                INTERACTIVE="true"
+                shift 1
+                ;;
             --help|-h)
                 show_help
                 ;;
@@ -154,11 +183,47 @@ build_env_prefix() {
     done
 }
 
+# 交互式部署向导
+interactive_setup() {
+    echo_info "进入交互式部署向导（直接回车使用方括号内的默认值）"
+    ask_value MASTER_IP "主节点 IP" "$MASTER_IP"
+    ask_value SLAVE_IP "备节点 IP" "$SLAVE_IP"
+    ask_value VIP "虚拟 IP（CIDR）" "${VIP:-$DEFAULT_VIP}"
+    ask_value INTERFACE "网卡名称" "${INTERFACE:-$DEFAULT_INTERFACE}"
+    ask_value FAILOVER_MODE "容灾模式（vrrp/haproxy/consul）" "${FAILOVER_MODE:-$DEFAULT_FAILOVER_MODE}"
+    if [[ -z "$MASTER_PWD" ]]; then
+        ask_secret MASTER_PWD "主节点 root 密码（留空=免密）"
+    fi
+    if [[ -z "$SLAVE_PWD" ]]; then
+        ask_secret SLAVE_PWD "备节点 root 密码（留空=免密）"
+    fi
+
+    echo_info "部署摘要："
+    echo_info "  主节点: $MASTER_IP"
+    echo_info "  备节点: $SLAVE_IP"
+    echo_info "  VIP: ${VIP:-$DEFAULT_VIP}"
+    echo_info "  网卡: ${INTERFACE:-$DEFAULT_INTERFACE}"
+    echo_info "  模式: ${FAILOVER_MODE:-$DEFAULT_FAILOVER_MODE}"
+    local answer
+    read -r -p "确认开始部署？[y/N]: " answer || true
+    case "$answer" in
+        y|Y) ;;
+        *) echo_info "已取消部署"; exit 1 ;;
+    esac
+    [[ -z "$MASTER_IP" || -z "$SLAVE_IP" ]] && echo_error "主/备节点 IP 不能为空"
+}
+
 # 验证参数
 validate_params() {
-    # 检查必填参数
-    [[ -z "$MASTER_IP" ]] && echo_error "必须指定主节点IP（--master-ip）"
-    [[ -z "$SLAVE_IP" ]] && echo_error "必须指定备节点IP（--slave-ip）"
+    # 检查必填参数（交互模式下先补问）
+    if [[ -z "$MASTER_IP" || -z "$SLAVE_IP" ]]; then
+        if is_interactive; then
+            interactive_setup
+        else
+            [[ -z "$MASTER_IP" ]] && echo_error "必须指定主节点IP（--master-ip）"
+            [[ -z "$SLAVE_IP" ]] && echo_error "必须指定备节点IP（--slave-ip）"
+        fi
+    fi
     
     # 设置默认值
     VIP=${VIP:-$DEFAULT_VIP}
@@ -309,6 +374,11 @@ main() {
     
     # 读取配置文件
     [[ -n "$CONFIG_FILE" ]] && read_config
+
+    # 显式要求交互时，即使参数齐全也走一遍向导
+    if [[ "$INTERACTIVE" == "true" ]]; then
+        interactive_setup
+    fi
     
     # 验证参数
     validate_params

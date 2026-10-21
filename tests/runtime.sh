@@ -217,6 +217,25 @@ else
     bad "VRRP 口令未透传"
 fi
 
+echo "== 12. 交互式向导：无参数时补问，取消时不得部署 =="
+rm -f /tmp/dnsha_fake_cmds /tmp/deploy_wizard.log
+printf '10.9.9.1\n10.9.9.2\n10.9.9.200/24\neth9\nvrrp\n\n\ny\n' | \
+    PATH=/tmp/fakebin:$PATH DNSHA_FORCE_INTERACTIVE=1 \
+    bash deploy_dns.sh >/tmp/deploy_wizard.log 2>&1
+if grep -qF "keepalived_config.sh --role master --vip 10.9.9.200/24 --interface eth9" /tmp/dnsha_fake_cmds 2>/dev/null; then
+    ok "向导输入被拼进远端 keepalived 命令"
+else
+    bad "向导输入未生效"
+fi
+rm -f /tmp/dnsha_fake_cmds
+if printf '10.9.9.1\n10.9.9.2\n\n\n\n\n\nn\n' | \
+    PATH=/tmp/fakebin:$PATH DNSHA_FORCE_INTERACTIVE=1 \
+    bash deploy_dns.sh >/tmp/deploy_wizard_cancel.log 2>&1; then
+    bad "确认回答 n 时仍然继续部署"
+else
+    ok "确认回答 n 时取消部署"
+fi
+
 echo
 echo "================ 运行态汇总 ================"
 printf '通过 %d 项，失败 %d 项\n' "$pass" "$fail"

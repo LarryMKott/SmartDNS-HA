@@ -42,6 +42,30 @@ echo_info() {
     log "${BLUE}INFO${NC}" "$1"
 }
 
+# 交互式输入：标准输入是终端时自动启用；--interactive / DNSHA_FORCE_INTERACTIVE=1 可强制
+INTERACTIVE="${INTERACTIVE:-false}"
+is_interactive() {
+    [[ "$INTERACTIVE" == "true" ]] || [[ -t 0 ]] || [[ "${DNSHA_FORCE_INTERACTIVE:-0}" == "1" ]]
+}
+
+ask_value() {
+    local var=$1 prompt=$2 default=${3:-} answer
+    if [[ -n "$default" ]]; then
+        read -r -p "$prompt [$default]: " answer || true
+        answer=${answer:-$default}
+    else
+        read -r -p "$prompt: " answer || true
+    fi
+    printf -v "$var" '%s' "$answer"
+}
+
+ask_secret() {
+    local var=$1 prompt=$2 answer
+    read -r -s -p "$prompt: " answer || true
+    echo
+    printf -v "$var" '%s' "$answer"
+}
+
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -56,6 +80,7 @@ Options:
   --failover, -f           仅修复容灾服务（Keepalived/Haproxy/Consul）
   --sync, -y               仅修复配置同步服务
   --rollback, -r           配置回滚到默认版本
+  --interactive, -I               交互式输入缺失参数
   --help, -h               显示帮助信息
 
 Examples:
@@ -102,6 +127,10 @@ parse_args() {
                 ROLLBACK="true"
                 shift
                 ;;
+            --interactive|-I)
+                INTERACTIVE="true"
+                shift 1
+                ;;
             --help|-h)
                 show_help
                 ;;
@@ -114,6 +143,10 @@ parse_args() {
 
 # 验证参数
 validate_params() {
+    if is_interactive; then
+        [[ -z "$MASTER_IP" ]] && ask_value MASTER_IP "主节点 IP"
+        [[ -z "$SLAVE_IP" ]] && ask_value SLAVE_IP "备节点 IP"
+    fi
     if [[ -z "$MASTER_IP" ]]; then
         echo_error "必须指定主节点IP（--master-ip）"
         exit 1

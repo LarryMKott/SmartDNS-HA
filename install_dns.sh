@@ -41,6 +41,30 @@ echo_info() {
     log "${BLUE}INFO${NC}" "$1"
 }
 
+# 交互式输入：标准输入是终端时自动启用；--interactive / DNSHA_FORCE_INTERACTIVE=1 可强制
+INTERACTIVE="${INTERACTIVE:-false}"
+is_interactive() {
+    [[ "$INTERACTIVE" == "true" ]] || [[ -t 0 ]] || [[ "${DNSHA_FORCE_INTERACTIVE:-0}" == "1" ]]
+}
+
+ask_value() {
+    local var=$1 prompt=$2 default=${3:-} answer
+    if [[ -n "$default" ]]; then
+        read -r -p "$prompt [$default]: " answer || true
+        answer=${answer:-$default}
+    else
+        read -r -p "$prompt: " answer || true
+    fi
+    printf -v "$var" '%s' "$answer"
+}
+
+ask_secret() {
+    local var=$1 prompt=$2 answer
+    read -r -s -p "$prompt: " answer || true
+    echo
+    printf -v "$var" '%s' "$answer"
+}
+
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -50,6 +74,7 @@ Usage: $0 [OPTIONS]
 
 Options:
   --role, -r <ROLE>     节点角色：master 或 slave（必填）
+  --interactive, -I            交互式输入缺失参数
   --help, -h            显示帮助信息
 
 Examples:
@@ -70,6 +95,10 @@ parse_args() {
                 ROLE="$2"
                 shift 2
                 ;;
+            --interactive|-I)
+                INTERACTIVE="true"
+                shift 1
+                ;;
             --help|-h)
                 show_help
                 ;;
@@ -82,6 +111,9 @@ parse_args() {
 
 # 验证参数
 validate_params() {
+    if [[ -z "$ROLE" ]] && is_interactive; then
+        ask_value ROLE "节点角色（master/slave）"
+    fi
     [[ -z "$ROLE" ]] && echo_error "必须指定节点角色（--role master|slave）"
     [[ "$ROLE" != "master" && "$ROLE" != "slave" ]] && echo_error "节点角色必须是 master 或 slave"
     echo_info "节点角色：$ROLE"

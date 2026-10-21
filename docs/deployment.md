@@ -42,6 +42,21 @@ sudo ./deploy_dns.sh \
 | `--config` | `-c` | 空 | 读取配置文件的路径 |
 | `--help` | `-h` | — | 打印帮助 |
 
+### 交互式部署
+
+不传参数直接运行会进入向导（标准输入是终端时自动启用）：
+
+```bash
+sudo ./deploy_dns.sh
+# 依次输入：主节点 IP、备节点 IP、VIP/CIDR、网卡、容灾模式、可选 root 密码
+# 最后确认摘要，回答 y 才开始部署
+```
+
+- `--interactive` / `-I` 强制走向导；即使已传参数也会以当前值为默认值再问一遍。
+- 非交互环境（CI、`curl | bash`）不会提示，缺参数仍然直接报错——自动化行为不变。
+- 确认步骤回答非 `y` 会以非 0 退出，不产生任何远程改动。
+- `install_dns.sh`、`keepalived_config.sh`、`sync_config.sh`、`verify_deploy.sh`、`health_check.sh`、`repair_dns.sh` 同样支持：在终端里缺参数会补问，`--interactive` 可强制。
+
 ### 用密码而不是免密
 
 ```bash

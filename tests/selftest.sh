@@ -131,6 +131,15 @@ else
     bad "透传值未转义或未接入远端命令"
 fi
 
+echo "== 12. 交互式入口 =="
+for f in deploy_dns.sh install_dns.sh keepalived_config.sh sync_config.sh verify_deploy.sh health_check.sh repair_dns.sh; do
+    if grep -q 'is_interactive' "$f" && grep -q 'interactive|-I' "$f"; then
+        ok "$f 支持交互式输入"
+    else
+        bad "$f 缺交互式入口"
+    fi
+done
+
 echo
 echo "================ 汇总 ================"
 printf '通过 %d 项，失败 %d 项\n' "$pass" "$fail"

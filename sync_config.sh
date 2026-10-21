@@ -43,6 +43,30 @@ echo_info() {
     log "${BLUE}INFO${NC}" "$1"
 }
 
+# 交互式输入：标准输入是终端时自动启用；--interactive / DNSHA_FORCE_INTERACTIVE=1 可强制
+INTERACTIVE="${INTERACTIVE:-false}"
+is_interactive() {
+    [[ "$INTERACTIVE" == "true" ]] || [[ -t 0 ]] || [[ "${DNSHA_FORCE_INTERACTIVE:-0}" == "1" ]]
+}
+
+ask_value() {
+    local var=$1 prompt=$2 default=${3:-} answer
+    if [[ -n "$default" ]]; then
+        read -r -p "$prompt [$default]: " answer || true
+        answer=${answer:-$default}
+    else
+        read -r -p "$prompt: " answer || true
+    fi
+    printf -v "$var" '%s' "$answer"
+}
+
+ask_secret() {
+    local var=$1 prompt=$2 answer
+    read -r -s -p "$prompt: " answer || true
+    echo
+    printf -v "$var" '%s' "$answer"
+}
+
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -55,6 +79,7 @@ Options:
   --master-ip, -m <IP>     主节点IP地址（必填）
   --slave-ip, -s <IP>      备节点IP地址（必填）
   --interval, -i <SEC>     同步检查间隔（秒，默认1秒）
+  --interactive, -I               交互式输入缺失参数
   --help, -h               显示帮助信息
 
 Examples:
@@ -87,6 +112,10 @@ parse_args() {
                 INTERVAL="$2"
                 shift 2
                 ;;
+            --interactive|-I)
+                INTERACTIVE="true"
+                shift 1
+                ;;
             --help|-h)
                 show_help
                 ;;
@@ -99,6 +128,11 @@ parse_args() {
 
 # 验证参数
 validate_params() {
+    if is_interactive; then
+        [[ -z "$ROLE" ]] && ask_value ROLE "节点角色（master/slave）"
+        [[ -z "$MASTER_IP" ]] && ask_value MASTER_IP "主节点 IP"
+        [[ -z "$SLAVE_IP" ]] && ask_value SLAVE_IP "备节点 IP"
+    fi
     [[ -z "$ROLE" ]] && echo_error "必须指定节点角色（--role）"
     [[ -z "$MASTER_IP" ]] && echo_error "必须指定主节点IP（--master-ip）"
     [[ -z "$SLAVE_IP" ]] && echo_error "必须指定备节点IP（--slave-ip）"

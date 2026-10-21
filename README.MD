@@ -114,6 +114,8 @@ sudo ./deploy_dns.sh \
   --interface eth0
 ```
 
+不想记参数就直接运行 `sudo ./deploy_dns.sh`：没有 TTY 参数时会进入交互式向导，逐项询问主/备 IP、VIP、网卡、模式与可选密码，确认后才开始部署。`--interactive` / `-I` 可强制走向导。
+
 固定凭据（可选，但生产建议）：`deploy_dns.sh` 会把这三个变量透传到节点脚本。
 
 ```bash

@@ -42,6 +42,30 @@ echo_info() {
     log "${BLUE}INFO${NC}" "$1"
 }
 
+# 交互式输入：标准输入是终端时自动启用；--interactive / DNSHA_FORCE_INTERACTIVE=1 可强制
+INTERACTIVE="${INTERACTIVE:-false}"
+is_interactive() {
+    [[ "$INTERACTIVE" == "true" ]] || [[ -t 0 ]] || [[ "${DNSHA_FORCE_INTERACTIVE:-0}" == "1" ]]
+}
+
+ask_value() {
+    local var=$1 prompt=$2 default=${3:-} answer
+    if [[ -n "$default" ]]; then
+        read -r -p "$prompt [$default]: " answer || true
+        answer=${answer:-$default}
+    else
+        read -r -p "$prompt: " answer || true
+    fi
+    printf -v "$var" '%s' "$answer"
+}
+
+ask_secret() {
+    local var=$1 prompt=$2 answer
+    read -r -s -p "$prompt: " answer || true
+    echo
+    printf -v "$var" '%s' "$answer"
+}
+
 # 显示帮助信息
 show_help() {
     cat << EOF
@@ -53,6 +77,7 @@ Options:
   --vip, -v <IP>            虚拟IP地址（必填，如：192.168.1.200）
   --role, -r <ROLE>         节点角色：master 或 slave（必填）
   --failover-mode, -f <MODE> 容灾模式：vrrp（默认）、haproxy、consul
+  --interactive, -I               交互式输入缺失参数
   --help, -h               显示帮助信息
 
 Examples:
@@ -81,6 +106,10 @@ parse_args() {
                 FAILOVER_MODE="$2"
                 shift 2
                 ;;
+            --interactive|-I)
+                INTERACTIVE="true"
+                shift 1
+                ;;
             --help|-h)
                 show_help
                 ;;
@@ -93,6 +122,10 @@ parse_args() {
 
 # 验证参数
 validate_params() {
+    if is_interactive; then
+        [[ -z "$VIP" ]] && ask_value VIP "虚拟 IP（纯 IP，不带掩码）"
+        [[ -z "$ROLE" ]] && ask_value ROLE "节点角色（master/slave）"
+    fi
     [[ -z "$VIP" ]] && echo_error "必须指定虚拟IP（--vip）"
     [[ -z "$ROLE" ]] && echo_error "必须指定节点角色（--role）"
     [[ "$ROLE" != "master" && "$ROLE" != "slave" ]] && echo_error "节点角色必须是 master 或 slave"

@@ -32,6 +32,7 @@ bash tests/selftest.sh
 | 9 | 安全底线（无弱口令等） | 默认口令倒退 |
 | 10 | 5 个关键脚本有 root 权限检查 | 非 root 执行到一半失败 |
 | 11 | `deploy_dns.sh` 透传 `ADGUARD_ADMIN_PASS`/`VRRP_AUTH_PASS`，且值经 `%q` 转义后接入远端命令 | 凭据在部署时被静默丢弃或命令注入 |
+| 12 | 7 个可运行脚本都带 `is_interactive` 与 `--interactive/-I` | 交互入口被删或只在部分脚本生效 |
 
 退出码 0 = 全部通过。它的价值是**把踩过的坑固化成断言**，比"看一遍代码"可靠。
 
@@ -66,6 +67,7 @@ bash tests/runtime.sh
 | 9 | 同步守护脚本的状态判定与空源保护（源为空时不删对端） |
 | 10 | `deploy_dns.sh` 对不可达节点快速失败（不无限等待） |
 | 11 | `deploy_dns.sh` 用假 `ssh`/`scp` 跑完整流程，断言带空格/引号的口令经 `%q` 转义后出现在远端 `install_dns.sh` / `keepalived_config.sh` 命令里 |
+| 12 | `DNSHA_FORCE_INTERACTIVE=1` + 管道输入驱动向导：输入值进入远端命令；确认回答 `n` 时取消 |
 
 第 10 组用 `timeout` 限制。Debian 12 与 13 的 `ssh` 行为略有差异，但"快速失败"这一语义是可移植的。第 11 组（运行态）用假 `ssh`/`scp` 拦截远端命令，验证转义与拼接真实生效；它不证明节点上脚本会使用该变量，只证明部署层没有丢值。
 
