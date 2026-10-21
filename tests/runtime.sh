@@ -192,6 +192,31 @@ else
     ok "不可达节点快速失败（不再假成功）"
 fi
 
+echo "== 11. 部署脚本：凭据环境变量经 %q 转义后透传到远端命令 =="
+rm -f /tmp/dnsha_fake_cmds /tmp/deploy_env.log
+cat > /tmp/fakebin/ssh <<'FAKE'
+#!/bin/bash
+printf '%s\n' "$*" >> /tmp/dnsha_fake_cmds
+exit 0
+FAKE
+cat > /tmp/fakebin/scp <<'FAKE'
+#!/bin/bash
+exit 0
+FAKE
+chmod +x /tmp/fakebin/ssh /tmp/fakebin/scp
+ADGUARD_ADMIN_PASS="p a'ss" VRRP_AUTH_PASS='x8' PATH=/tmp/fakebin:$PATH \
+    bash deploy_dns.sh -m 10.0.0.1 -s 10.0.0.2 >/tmp/deploy_env.log 2>&1
+if grep -qF "ADGUARD_ADMIN_PASS=p\\ a\\'ss VRRP_AUTH_PASS=x8 ./install_dns.sh --role master" /tmp/dnsha_fake_cmds 2>/dev/null; then
+    ok "AdGuard 口令带空格/引号时被正确转义并下发给 install_dns.sh"
+else
+    bad "AdGuard 口令未按 %q 转义下发"
+fi
+if grep -qF "ADGUARD_ADMIN_PASS=p\ a\'ss VRRP_AUTH_PASS=x8 ./keepalived_config.sh" /tmp/dnsha_fake_cmds 2>/dev/null; then
+    ok "VRRP 口令被透传给 keepalived_config.sh"
+else
+    bad "VRRP 口令未透传"
+fi
+
 echo
 echo "================ 运行态汇总 ================"
 printf '通过 %d 项，失败 %d 项\n' "$pass" "$fail"
